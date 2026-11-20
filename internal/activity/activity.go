@@ -285,6 +285,11 @@ func (l *Log) Handle(payload []byte) error {
 			if err = json.Unmarshal(raw, &v); err == nil {
 				open := v.Open
 				l.status.ModemOpen = &open
+				// The gateway says it's starting, then opens the modem: from
+				// then on it's running (it says nothing more until it stops)
+				if open && strings.HasSuffix(l.status.Gateway, "is starting") {
+					l.status.Gateway = "running"
+				}
 				if v.Description != "" || !v.Open {
 					l.status.Modem = v.Description
 				}

@@ -149,3 +149,18 @@ func TestBadMessages(t *testing.T) {
 		t.Errorf("other modes should be ignored: %v", err)
 	}
 }
+
+func TestGatewayRunning(t *testing.T) {
+	l := New("", 0)
+	for _, m := range []string{
+		`{"status":{"timestamp":"2026-11-20T01:02:03.004Z","message":"m17-gateway is starting"}}`,
+		`{"Modem":{"timestamp":"2026-11-20T01:02:03.004Z","open":true,"description":"x"}}`,
+	} {
+		if err := l.Handle([]byte(m)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if st, _ := l.Snapshot(); st.Gateway != "running" {
+		t.Errorf("Gateway = %q, want running", st.Gateway)
+	}
+}
