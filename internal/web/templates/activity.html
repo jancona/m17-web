@@ -28,7 +28,8 @@
 		<td>{{pct .BER}}</td>
 		<td>{{if .LateEntry}}late entry {{end}}{{if .Lost}}lost {{end}}{{with .Position}}<span title="{{.Latitude}}, {{.Longitude}}">📍</span>{{end}}</td>
 		{{else}}
-		<td colspan="2">{{if .Text}}SMS{{else}}packet{{end}}</td>
+		<td>{{if .Text}}SMS{{else}}packet{{end}}</td>
+		<td>{{pct .BER}}</td>
 		<td>{{with .Text}}“{{.}}”{{else}}{{.Data}}{{end}}</td>
 		{{end}}
 	</tr>

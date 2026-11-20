@@ -13,12 +13,13 @@ import (
 // SaveInterval is how often a changed log is written to the SD card.
 const SaveInterval = 5 * time.Minute
 
-// Subscribe listens to <name>/json on the broker at addr (host:port) and
-// feeds the log until ctx is done, saving it every SaveInterval and at the
+// Subscribe listens to <name>/json (events) and <name>/state/# (the
+// gateway's current state, retained, so it arrives as soon as we subscribe)
+// on the broker at addr (host:port) and feeds the log until ctx is done, saving it every SaveInterval and at the
 // end. It reconnects by itself, so a broker that's down or restarting is
 // fine.
 func (l *Log) Subscribe(ctx context.Context, addr, name string, log *slog.Logger) {
-	topic := name + "/json"
+	topics := map[string]byte{name + "/json": 1, name + "/state/#": 1}
 	host, _ := os.Hostname()
 	id := "m17-admin-" + host
 	if len(id) > 23 {
@@ -34,17 +35,17 @@ func (l *Log) Subscribe(ctx context.Context, addr, name string, log *slog.Logger
 		SetMaxReconnectInterval(time.Minute).
 		SetOnConnectHandler(func(c mqtt.Client) {
 			// A clean session forgets subscriptions, so subscribe on every
-			// connection. The broker sends the retained link message.
-			t := c.Subscribe(topic, 1, func(_ mqtt.Client, m mqtt.Message) {
+			// connection. The broker sends the retained state at once.
+			t := c.SubscribeMultiple(topics, func(_ mqtt.Client, m mqtt.Message) {
 				if err := l.Handle(m.Payload()); err != nil {
 					log.Warn("activity: bad message", "topic", m.Topic(), "err", err)
 				}
 			})
 			if t.WaitTimeout(10*time.Second) && t.Error() == nil {
 				l.SetBroker(true)
-				log.Info("activity: subscribed", "broker", addr, "topic", topic)
+				log.Info("activity: subscribed", "broker", addr, "name", name)
 			} else {
-				log.Warn("activity: subscribe failed", "topic", topic, "err", t.Error())
+				log.Warn("activity: subscribe failed", "name", name, "err", t.Error())
 			}
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
@@ -103,8 +104,8 @@ func (l *Link) Describe() string {
 }
 
 // ModemState describes the modem for the activity page: its description
-// when open, "closed", or "unknown" when the gateway hasn't said since we
-// subscribed (it doesn't retain its Modem message).
+// when open, "closed", or "unknown" when nothing has said (a gateway
+// without the retained state topics, until its modem opens or closes).
 func (s Status) ModemState() string {
 	switch {
 	case s.ModemOpen == nil:

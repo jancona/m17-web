@@ -43,7 +43,7 @@ type Entry struct {
 	LateEntry bool     `json:"late_entry,omitempty"` // heard from the middle
 	Lost      bool     `json:"lost,omitempty"`       // ended without an end frame
 	Duration  *float64 `json:"duration,omitempty"`   // seconds
-	BER       *float64 `json:"ber,omitempty"`        // percent, RF only
+	BER       *float64 `json:"ber,omitempty"`        // percent, RF only (voice and packets)
 	// Packet
 	Protocol *int    `json:"protocol,omitempty"`
 	Text     *string `json:"text,omitempty"` // SMS
@@ -80,12 +80,12 @@ func (l *Link) Linked() bool {
 
 // Status is what the gateway last said about itself.
 type Status struct {
-	Broker    bool      `json:"broker"`            // connected to the broker
-	Heard     time.Time `json:"heard,omitzero"`    // last message from the gateway
-	Gateway   string    `json:"gateway,omitempty"` // last lifecycle message
-	Mode      string    `json:"mode,omitempty"`    // idle, M17, ...
+	Broker    bool      `json:"broker"`               // connected to the broker
+	Heard     time.Time `json:"heard,omitzero"`       // last message from the gateway
+	Gateway   string    `json:"gateway,omitempty"`    // last lifecycle message
+	Mode      string    `json:"mode,omitempty"`       // idle, M17, ...
 	ModemOpen *bool     `json:"modem_open,omitempty"` // nil: not heard since we subscribed
-	Modem     string    `json:"modem,omitempty"` // description
+	Modem     string    `json:"modem,omitempty"`      // description
 	Link      *Link     `json:"link,omitempty"`
 }
 
@@ -235,14 +235,15 @@ type (
 		BER         *float64 `json:"ber"`
 	}
 	packetMsg struct {
-		Timestamp string  `json:"timestamp"`
-		Source    string  `json:"source"`
-		Src       string  `json:"src_callsign"`
-		Dst       string  `json:"dst_callsign"`
-		Protocol  int     `json:"protocol"`
-		Text      *string `json:"text"`
-		Data      string  `json:"data"`
-		CAN       *int    `json:"can"`
+		Timestamp string   `json:"timestamp"`
+		Source    string   `json:"source"`
+		Src       string   `json:"src_callsign"`
+		Dst       string   `json:"dst_callsign"`
+		Protocol  int      `json:"protocol"`
+		Text      *string  `json:"text"`
+		Data      string   `json:"data"`
+		CAN       *int     `json:"can"`
+		BER       *float64 `json:"ber"`
 	}
 	gnssMsg struct {
 		Timestamp string `json:"timestamp"`
@@ -272,24 +273,20 @@ func (l *Log) Handle(payload []byte) error {
 					l.status.Mode = v.Mode
 				}
 				if v.Message != "" {
-					l.status.Gateway = v.Message
+					l.setGateway(v.Message)
 				}
 			}
 		case "status":
 			var v mmdvmMsg
 			if err = json.Unmarshal(raw, &v); err == nil && v.Message != "" {
-				l.status.Gateway = v.Message
+				l.setGateway(v.Message)
 			}
 		case "Modem":
 			var v modemMsg
 			if err = json.Unmarshal(raw, &v); err == nil {
 				open := v.Open
 				l.status.ModemOpen = &open
-				// The gateway says it's starting, then opens the modem: from
-				// then on it's running (it says nothing more until it stops)
-				if open && strings.HasSuffix(l.status.Gateway, "is starting") {
-					l.status.Gateway = "running"
-				}
+				l.setGateway(l.status.Gateway)
 				if v.Description != "" || !v.Open {
 					l.status.Modem = v.Description
 				}
@@ -310,7 +307,7 @@ func (l *Log) Handle(payload []byte) error {
 			if err = json.Unmarshal(raw, &v); err == nil {
 				p := v.Protocol
 				l.add(&Entry{Time: l.parseTime(v.Timestamp), Kind: "packet", Source: v.Source,
-					Src: v.Src, Dst: v.Dst, CAN: v.CAN, Protocol: &p, Text: v.Text, Data: v.Data})
+					Src: v.Src, Dst: v.Dst, CAN: v.CAN, Protocol: &p, Text: v.Text, Data: v.Data, BER: v.BER})
 			}
 		case "M17GNSS":
 			var v gnssMsg
@@ -323,6 +320,17 @@ func (l *Log) Handle(payload []byte) error {
 		}
 	}
 	return nil
+}
+
+// setGateway records the gateway's lifecycle message. It says it's
+// starting, then opens the modem, and says nothing more until it stops; so
+// "starting" with the modem open means running. (The retained state topics
+// can arrive in either order.)
+func (l *Log) setGateway(msg string) {
+	if strings.HasSuffix(msg, "is starting") && l.status.ModemOpen != nil && *l.status.ModemOpen {
+		msg = "running"
+	}
+	l.status.Gateway = msg
 }
 
 func (l *Log) voice(v m17Msg) {

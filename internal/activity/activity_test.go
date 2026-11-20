@@ -45,10 +45,10 @@ func TestGatewaySession(t *testing.T) {
 	}
 	// Newest first: data packet, SMS, network voice, RF voice
 	data, sms, net, rf := entries[0], entries[1], entries[2], entries[3]
-	if data.Kind != "packet" || data.Data != "81DEAD" || *data.Protocol != 129 || data.Text != nil {
+	if data.Kind != "packet" || data.Data != "81DEAD" || *data.Protocol != 129 || data.Text != nil || data.BER != nil {
 		t.Errorf("data packet = %+v", data)
 	}
-	if sms.Kind != "packet" || sms.Text == nil || *sms.Text != "hi" || sms.Dst != "PARROT" || sms.Source != "rf" {
+	if sms.Kind != "packet" || sms.Text == nil || *sms.Text != "hi" || sms.Dst != "PARROT" || sms.Source != "rf" || sms.BER == nil || *sms.BER != 7.25 {
 		t.Errorf("SMS = %+v", sms)
 	}
 	if net.Src != "AA5RL" || !net.LateEntry || !net.Lost || net.Active || *net.Duration != 1.6 || net.BER != nil {
@@ -151,16 +151,18 @@ func TestBadMessages(t *testing.T) {
 }
 
 func TestGatewayRunning(t *testing.T) {
-	l := New("", 0)
-	for _, m := range []string{
-		`{"status":{"timestamp":"2026-11-20T01:02:03.004Z","message":"m17-gateway is starting"}}`,
-		`{"Modem":{"timestamp":"2026-11-20T01:02:03.004Z","open":true,"description":"x"}}`,
-	} {
-		if err := l.Handle([]byte(m)); err != nil {
-			t.Fatal(err)
+	status := `{"status":{"timestamp":"2026-11-20T01:02:03.004Z","message":"m17-gateway is starting"}}`
+	modem := `{"Modem":{"timestamp":"2026-11-20T01:02:03.004Z","open":true,"description":"x"}}`
+	// Either order: retained messages on different topics arrive in any
+	for _, order := range [][]string{{status, modem}, {modem, status}} {
+		l := New("", 0)
+		for _, m := range order {
+			if err := l.Handle([]byte(m)); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
-	if st, _ := l.Snapshot(); st.Gateway != "running" {
-		t.Errorf("Gateway = %q, want running", st.Gateway)
+		if st, _ := l.Snapshot(); st.Gateway != "running" {
+			t.Errorf("Gateway = %q, want running", st.Gateway)
+		}
 	}
 }
