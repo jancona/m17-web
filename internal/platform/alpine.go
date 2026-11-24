@@ -18,14 +18,14 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jancona/m17-admin/internal/firmware"
-	"github.com/jancona/m17-admin/internal/hat"
+	"github.com/jancona/m17-web/internal/firmware"
+	"github.com/jancona/m17-web/internal/hat"
 )
 
 // Alpine is the Platform on m17-hotspot-os. It reads what it may read
 // directly (the gateway's configuration, host files, time zones, the
 // dashboard's password hash) and does the rest through m17-hotspot-os's
-// admin helper, which m17-admin may run as root through doas.
+// admin helper, which m17-web may run as root through doas.
 type Alpine struct {
 	// Helper is the command that runs the admin helper.
 	Helper []string

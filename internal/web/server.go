@@ -1,4 +1,4 @@
-// Package web is m17-admin's HTTP interface: the setup wizard under
+// Package web is m17-web's HTTP interface: the setup wizard under
 // /setup/, and the captive-portal answers that make phones open it.
 package web
 
@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jancona/m17-admin/internal/auth"
-	"github.com/jancona/m17-admin/internal/firmware"
-	"github.com/jancona/m17-admin/internal/platform"
-	"github.com/jancona/m17-admin/internal/settings"
-	"github.com/jancona/m17-admin/internal/wizard"
+	"github.com/jancona/m17-web/internal/auth"
+	"github.com/jancona/m17-web/internal/firmware"
+	"github.com/jancona/m17-web/internal/platform"
+	"github.com/jancona/m17-web/internal/settings"
+	"github.com/jancona/m17-web/internal/wizard"
 )
 
 //go:embed templates/*.html
@@ -220,7 +220,7 @@ func (s *Server) state(ctx context.Context) (wizard.State, error) {
 		return st, err
 	}
 	if st.Started && st.Draft.SavedSSIDs == nil {
-		// A draft from before m17-admin tracked the saved networks: fetch
+		// A draft from before m17-web tracked the saved networks: fetch
 		// them, so a saved network isn't rewritten without its password
 		if cur, err := s.plat.Current(ctx); err == nil && len(cur.WiFiSSIDs) > 0 {
 			st.Draft.SavedSSIDs = cur.WiFiSSIDs

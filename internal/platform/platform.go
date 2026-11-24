@@ -1,10 +1,10 @@
-// Package platform is everything m17-admin needs from the operating
+// Package platform is everything m17-web needs from the operating
 // system: reading the hotspot's current settings, scanning for WiFi
 // networks, detecting the radio HAT, and applying settings.
 //
 // The Alpine/OpenRC implementation (m17-hotspot-os) calls a small
 // privileged helper through doas; Fake is for tests and for developing the
-// UI on a workstation (m17-admin -dev). Other systems (Raspberry Pi OS with
+// UI on a workstation (m17-web -dev). Other systems (Raspberry Pi OS with
 // the installer) can be added as further implementations.
 package platform
 
@@ -12,10 +12,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jancona/m17-admin/internal/firmware"
+	"github.com/jancona/m17-web/internal/firmware"
 )
 
-// Platform is the operating system as m17-admin sees it.
+// Platform is the operating system as m17-web sees it.
 type Platform interface {
 	// Current returns the hotspot's settings as they are now, to fill in
 	// the wizard's forms.
@@ -48,7 +48,7 @@ type Platform interface {
 	TimeZones(ctx context.Context) ([]string, error)
 
 	// AdminPasswordSet reports whether the dashboard admin password (shared
-	// by rpi-dashboard and m17-admin) has been set.
+	// by rpi-dashboard and m17-web) has been set.
 	AdminPasswordSet() (bool, error)
 
 	// CheckAdminPassword reports whether password is the admin password.

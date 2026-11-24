@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jancona/m17-admin/internal/platform"
+	"github.com/jancona/m17-web/internal/platform"
 )
 
 // Draft is everything the wizard has collected so far.

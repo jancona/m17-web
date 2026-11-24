@@ -1,9 +1,9 @@
-// m17-admin is the M17 hotspot's setup wizard (and, later, its system
-// administration pages). It listens on localhost behind nginx, which sends
+// m17-web is the M17 hotspot's web UI: the setup wizard now, its system
+// and admin pages and its dashboard later. It listens on localhost behind nginx, which sends
 // it /setup/ (and, while the setup access point is up, every captive-portal
 // check).
 //
-//	m17-admin -dev     run on a workstation against a simulated hotspot
+//	m17-web -dev     run on a workstation against a simulated hotspot
 package main
 
 import (
@@ -18,14 +18,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jancona/m17-admin/internal/platform"
-	"github.com/jancona/m17-admin/internal/web"
-	"github.com/jancona/m17-admin/internal/wizard"
+	"github.com/jancona/m17-web/internal/platform"
+	"github.com/jancona/m17-web/internal/web"
+	"github.com/jancona/m17-web/internal/wizard"
 )
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:8090", "address to listen on")
-	stateDir := flag.String("state-dir", "/var/lib/m17-admin", "where the wizard keeps its progress")
+	stateDir := flag.String("state-dir", "/var/lib/m17-web", "where the wizard keeps its progress")
 	dev := flag.Bool("dev", false, "run against a simulated hotspot, with state in a temporary directory")
 	debug := flag.Bool("debug", false, "log every request")
 	flag.Parse()
@@ -41,7 +41,7 @@ func main() {
 		fake := platform.NewFake()
 		fake.FlashTime = 10 * time.Second // long enough to see the progress page
 		plat = fake
-		dir, err := os.MkdirTemp("", "m17-admin-dev-")
+		dir, err := os.MkdirTemp("", "m17-web-dev-")
 		if err != nil {
 			fail(log, err)
 		}
@@ -82,6 +82,6 @@ func main() {
 
 func fail(log *slog.Logger, err error) {
 	log.Error(err.Error())
-	fmt.Fprintln(os.Stderr, "m17-admin:", err)
+	fmt.Fprintln(os.Stderr, "m17-web:", err)
 	os.Exit(1)
 }
