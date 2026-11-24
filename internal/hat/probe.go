@@ -12,7 +12,7 @@ import (
 
 	"go.bug.st/serial"
 
-	"github.com/jancona/m17-admin/internal/firmware"
+	"github.com/jancona/m17-web/internal/firmware"
 )
 
 // Port is the part of a serial port the probe uses.

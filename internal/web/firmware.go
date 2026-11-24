@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/jancona/m17-admin/internal/auth"
-	"github.com/jancona/m17-admin/internal/firmware"
-	"github.com/jancona/m17-admin/internal/platform"
-	"github.com/jancona/m17-admin/internal/wizard"
+	"github.com/jancona/m17-web/internal/auth"
+	"github.com/jancona/m17-web/internal/firmware"
+	"github.com/jancona/m17-web/internal/platform"
+	"github.com/jancona/m17-web/internal/wizard"
 )
 
 // firmwareInfo is what the firmware step shows.

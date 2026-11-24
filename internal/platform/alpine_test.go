@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jancona/m17-admin/internal/hat"
+	"github.com/jancona/m17-web/internal/hat"
 )
 
 // newTestAlpine returns an Alpine whose files are in a temporary

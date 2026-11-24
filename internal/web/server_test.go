@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jancona/m17-admin/internal/platform"
-	"github.com/jancona/m17-admin/internal/wizard"
+	"github.com/jancona/m17-web/internal/platform"
+	"github.com/jancona/m17-web/internal/wizard"
 )
 
 type harness struct {

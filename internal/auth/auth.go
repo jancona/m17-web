@@ -1,6 +1,6 @@
-// Package auth keeps login sessions and CSRF tokens for m17-admin.
+// Package auth keeps login sessions and CSRF tokens for m17-web.
 //
-// m17-admin has one user, the hotspot's administrator, with the same
+// m17-web has one user, the hotspot's administrator, with the same
 // password as rpi-dashboard's admin pages. Sessions are kept in memory: a
 // restart means logging in again, which is fine for a hotspot.
 package auth
@@ -16,7 +16,7 @@ import (
 
 const (
 	// CookieName is the session cookie.
-	CookieName = "m17admin"
+	CookieName = "m17web"
 	// SessionLifetime is how long a session lasts without use.
 	SessionLifetime = 12 * time.Hour
 	// failureDelay slows down password guessing.

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/jancona/m17-admin/internal/platform"
+	"github.com/jancona/m17-web/internal/platform"
 )
 
 func good() Draft {

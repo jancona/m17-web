@@ -10,11 +10,11 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jancona/m17-admin/internal/firmware"
+	"github.com/jancona/m17-web/internal/firmware"
 )
 
 // Fake is an in-memory Platform for tests and for running the UI on a
-// workstation (m17-admin -dev). It starts as an unconfigured hotspot with
+// workstation (m17-web -dev). It starts as an unconfigured hotspot with
 // an MMDVM HAT and a few WiFi networks in range.
 type Fake struct {
 	mu           sync.Mutex

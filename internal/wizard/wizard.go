@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jancona/m17-admin/internal/platform"
-	"github.com/jancona/m17-admin/internal/settings"
+	"github.com/jancona/m17-web/internal/platform"
+	"github.com/jancona/m17-web/internal/settings"
 )
 
 // Step is one page of the wizard.

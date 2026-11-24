@@ -1,4 +1,4 @@
-// m17-admin: small improvements on top of plain forms. Every page works
+// m17-web: small improvements on top of plain forms. Every page works
 // without this file.
 (function () {
 	"use strict";

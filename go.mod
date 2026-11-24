@@ -1,4 +1,4 @@
-module github.com/jancona/m17-admin
+module github.com/jancona/m17-web
 
 go 1.26.0
 
