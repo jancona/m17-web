@@ -693,6 +693,7 @@ func (s *Server) parseTemplates() error {
 			}
 			return d.String()
 		},
+		"txPower": txPower,
 		"mode":    entryMode,
 		"qrz":     qrzURL,
 		"isCall":  isCallsign,
