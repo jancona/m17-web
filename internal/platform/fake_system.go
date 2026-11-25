@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,8 @@ type fakeSystem struct {
 	gatewayStopped bool
 	// GatewayActions lists ControlGateway's calls, for tests
 	GatewayActions []string
+	// gatewayINI and gatewayPrev: the settings file and the previous one
+	gatewayINI, gatewayPrev string
 	// Reboots and Shutdowns count the calls, for tests.
 	Reboots, Shutdowns int
 	// Unsupported makes every System method fail as on an old image.
@@ -260,6 +263,71 @@ func (f *Fake) GatewayCalls() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.sys.GatewayActions)
+}
+
+// fakeGatewayINI is the fake gateway's settings file.
+const fakeGatewayINI = `[General]
+Callsign=N1ADJ
+[Radio]
+RXFrequency=439000000
+TXFrequency=439000000
+[Reflector]
+Name=M17-M17
+Module=C
+[Modem]
+Type=cc1200
+`
+
+func (f *Fake) GatewayConfig(ctx context.Context) (GatewayConfig, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sys.gatewayINI == "" {
+		f.sys.gatewayINI = fakeGatewayINI
+	}
+	return GatewayConfig{Text: f.sys.gatewayINI, HasPrevious: f.sys.gatewayPrev != ""}, nil
+}
+
+// fakeCheck stands in for -check-config: Callsign=BAD is an error, a line
+// "Typo=" a warning.
+func fakeCheck(text string) ConfigCheck {
+	var c ConfigCheck
+	for _, l := range strings.Split(text, "\n") {
+		switch {
+		case strings.TrimSpace(l) == "Callsign=BAD":
+			c.Errors = append(c.Errors, "bad callsign BAD")
+		case strings.HasPrefix(l, "Typo="):
+			c.Warnings = append(c.Warnings, "[General] Typo is ignored")
+		}
+	}
+	return c
+}
+
+func (f *Fake) CheckGatewayConfig(ctx context.Context, text string) (ConfigCheck, error) {
+	return fakeCheck(text), nil
+}
+
+func (f *Fake) SaveGatewayConfig(ctx context.Context, text string) (ConfigCheck, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := fakeCheck(text)
+	if c.OK() {
+		if f.sys.gatewayINI == "" {
+			f.sys.gatewayINI = fakeGatewayINI
+		}
+		f.sys.gatewayPrev, f.sys.gatewayINI = f.sys.gatewayINI, text
+		f.sys.gatewayStart = time.Now()
+	}
+	return c, nil
+}
+
+func (f *Fake) RestoreGatewayConfig(ctx context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sys.gatewayPrev == "" {
+		return errors.New("no previous settings")
+	}
+	f.sys.gatewayINI, f.sys.gatewayPrev = f.sys.gatewayPrev, f.sys.gatewayINI
+	return nil
 }
 
 func (f *Fake) Reboot(ctx context.Context) error {

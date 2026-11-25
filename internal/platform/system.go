@@ -51,6 +51,18 @@ type System interface {
 	// started or the hotspot restarts.
 	ControlGateway(ctx context.Context, action string) error
 
+	// GatewayConfig is m17-gateway's settings file, as text.
+	GatewayConfig(ctx context.Context) (GatewayConfig, error)
+	// CheckGatewayConfig checks a settings file with the gateway.
+	CheckGatewayConfig(ctx context.Context, text string) (ConfigCheck, error)
+	// SaveGatewayConfig checks a settings file and, without errors, saves
+	// it (keeping the current one as the previous) and restarts the
+	// gateway. The check says whether it was saved.
+	SaveGatewayConfig(ctx context.Context, text string) (ConfigCheck, error)
+	// RestoreGatewayConfig swaps the previous settings file back and
+	// restarts the gateway.
+	RestoreGatewayConfig(ctx context.Context) error
+
 	// Reboot restarts the hotspot, a few seconds after the call returns.
 	Reboot(ctx context.Context) error
 	// Shutdown powers it off, a few seconds after the call returns.
@@ -100,6 +112,41 @@ type GatewayState struct {
 	// AtBoot: the gateway starts with the hotspot
 	AtBoot bool
 }
+
+// GatewayConfig is the gateway's settings file.
+type GatewayConfig struct {
+	Text string
+	// HasPrevious: a previous file was kept, so it can be restored
+	HasPrevious bool
+}
+
+// ConfigCheck is what m17-gateway -check-config said about a settings file.
+type ConfigCheck struct {
+	Errors   []string // what would stop the gateway starting
+	Warnings []string // settings it would ignore
+}
+
+// OK reports whether the gateway would start with the file.
+func (c ConfigCheck) OK() bool { return len(c.Errors) == 0 }
+
+// parseConfigCheck reads -check-config's "error: " and "warning: " lines.
+func parseConfigCheck(out string) ConfigCheck {
+	var c ConfigCheck
+	for _, l := range strings.Split(out, "\n") {
+		if m, ok := strings.CutPrefix(l, "error: "); ok {
+			c.Errors = append(c.Errors, m)
+		} else if m, ok := strings.CutPrefix(l, "warning: "); ok {
+			c.Warnings = append(c.Warnings, m)
+		}
+	}
+	return c
+}
+
+// ErrNoConfigCheck: the installed m17-gateway can't check settings files.
+var ErrNoConfigCheck = errors.New("this hotspot's m17-gateway can't check settings files; update the M17 software first")
+
+// MaxGatewayConfig is the largest settings file the admin helper takes.
+const MaxGatewayConfig = 64 << 10
 
 // GatewayActions are what ControlGateway does.
 var GatewayActions = []string{"start", "stop", "restart"}

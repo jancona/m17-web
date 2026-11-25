@@ -32,6 +32,7 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 {{- else if eq .ID "os"}}{{template "p-os" .}}
 {{- else if eq .ID "sysinfo"}}{{template "p-sysinfo" .}}
 {{- else if eq .ID "gateway"}}{{template "p-gateway" .}}
+{{- else if eq .ID "gatewayini"}}{{template "p-gatewayini" .}}
 {{- else if eq .ID "logs"}}{{template "p-logs" .}}
 {{- else if eq .ID "firmware"}}{{template "p-firmware" .}}
 {{- end}}
@@ -507,6 +508,35 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 		{{template "panel-form" (dict "P" $p "Action" "start" "Label" "Start" "Class" "primary")}}
 		{{end}}
 	</div>
+	{{end}}
+{{end}}
+
+{{define "p-gatewayini"}}
+	{{$p := .}}{{$e := .Panels.Expert}}
+	{{with index .Errors "gatewayini"}}<p class="error">{{.}}</p>{{end}}
+	{{with .Panels.ExpertCheck}}
+	{{if .Errors}}
+	<div class="notice warn" role="alert">
+		<p><strong>What would stop the gateway starting:</strong></p>
+		<ul>{{range .Errors}}<li>{{.}}</li>{{end}}</ul>
+	</div>
+	{{end}}
+	{{if and .Warnings (not .OK)}}
+	<div class="notice"><p><strong>Settings it would ignore:</strong></p><ul>{{range .Warnings}}<li>{{.}}</li>{{end}}</ul></div>
+	{{end}}
+	{{end}}
+	<form method="post" action="/admin/{{.AdminPage.ID}}/{{.ID}}">
+		<input type="hidden" name="csrf" value="{{.CSRF}}">
+		<label for="gatewayini-text" class="visually-hidden">m17-gateway.ini</label>
+		<textarea id="gatewayini-text" name="ini" class="code" rows="28" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">{{$e.Text}}</textarea>
+		<p class="hint">Each setting is described in <a href="https://github.com/jancona/m17/blob/master/docs/m17-gateway-configuration.md" target="_blank" rel="noopener noreferrer">the m17-gateway configuration guide</a>.</p>
+		<div class="actions">
+			<button type="submit" name="action" value="check" class="secondary">Check</button>
+			<button type="submit" name="action" value="save" class="primary" data-confirm="Save these settings and restart the gateway? A QSO in progress is cut off.">Save and restart the gateway</button>
+		</div>
+	</form>
+	{{if $e.HasPrevious}}
+	<div class="actions">{{template "panel-form" (dict "P" $p "Action" "restore" "Label" "Go back to the previous file" "Confirm" "Put the previous settings file back and restart the gateway? These settings become the previous file, so you can switch back.")}}</div>
 	{{end}}
 {{end}}
 

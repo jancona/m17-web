@@ -299,6 +299,62 @@ func TestAdminGateway(t *testing.T) {
 	}
 }
 
+// TestAdminExpert: the gateway's settings file: checked by the gateway,
+// refused with its errors (keeping what was typed), saved, and restored.
+func TestAdminExpert(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	post := func(action, text string) (int, string, string) {
+		t.Helper()
+		return h.postFrom(h.client, "/admin/expert", "/admin/expert/gatewayini", url.Values{"action": {action}, "ini": {text}})
+	}
+	orig, _ := h.fake.GatewayConfig(t.Context())
+
+	_, _, body := h.get(h.client, "/admin/expert")
+	if !strings.Contains(body, "Callsign=N1ADJ") || !strings.Contains(body, `name="ini"`) || strings.Contains(body, "Go back to the previous file") {
+		t.Fatalf("expert page:\n%s", body)
+	}
+
+	bad := strings.Replace(orig.Text, "Callsign=N1ADJ", "Callsign=BAD", 1) + "<script>x</script>\n"
+	code, _, body := post("check", bad)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "bad callsign BAD") || !strings.Contains(body, "wouldn&#39;t start") {
+		t.Errorf("check, bad: %d\n%s", code, body)
+	}
+	if !strings.Contains(body, "Callsign=BAD") || !strings.Contains(body, "&lt;script&gt;x&lt;/script&gt;") {
+		t.Error("the typed text isn't kept, escaped")
+	}
+	code, _, body = post("save", bad)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "Not saved") || !strings.Contains(body, "bad callsign BAD") {
+		t.Errorf("save, bad: %d", code)
+	}
+	if gc, _ := h.fake.GatewayConfig(t.Context()); gc.Text != orig.Text {
+		t.Error("a bad file was saved")
+	}
+
+	good := strings.ReplaceAll(orig.Text+"Typo=1\n", "\n", "\r\n")
+	code, _, body = post("check", good)
+	if code != 200 || !strings.Contains(body, "would start") || !strings.Contains(body, "Typo is ignored") {
+		t.Errorf("check, good: %d", code)
+	}
+	code, loc, _ := post("save", good)
+	h.expectRedirect(code, loc, "/admin/expert#gatewayini")
+	gc, _ := h.fake.GatewayConfig(t.Context())
+	if gc.Text != orig.Text+"Typo=1\n" || !gc.HasPrevious {
+		t.Errorf("saved %q (previous kept: %v), want LF line ends", gc.Text, gc.HasPrevious)
+	}
+	_, _, body = h.get(h.client, "/admin/expert")
+	for _, want := range []string{"Saved, and the gateway is restarting", "Typo is ignored", "Go back to the previous file"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("after saving, no %q", want)
+		}
+	}
+	code, loc, _ = h.postFrom(h.client, "/admin/expert", "/admin/expert/gatewayini", url.Values{"action": {"restore"}})
+	h.expectRedirect(code, loc, "/admin/expert#gatewayini")
+	if gc, _ := h.fake.GatewayConfig(t.Context()); gc.Text != orig.Text {
+		t.Errorf("restored %q", gc.Text)
+	}
+}
+
 // TestAdminOldSystem: on an image whose admin helper predates the panels,
 // they say so instead of failing.
 func TestAdminOldSystem(t *testing.T) {
