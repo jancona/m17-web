@@ -81,7 +81,7 @@ func (s *Server) Sessions() *auth.Sessions { return s.sessions }
 func (s *Server) routes() {
 	static, _ := fs.Sub(staticFS, "static")
 	s.mux.Handle("GET /setup/static/", http.StripPrefix("/setup/static/", http.FileServerFS(static)))
-	s.mux.HandleFunc("GET /{$}", s.redirectToSetup)
+	s.mux.HandleFunc("GET /{$}", s.root)
 	s.mux.HandleFunc("GET /setup", s.redirectToSetup)
 	s.mux.HandleFunc("GET /setup/{$}", s.start)
 	s.mux.HandleFunc("GET /setup/login", s.loginForm)
@@ -144,6 +144,16 @@ func (w *statusWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// root is the hotspot's front page: the dashboard once it's set up, the
+// wizard before.
+func (s *Server) root(w http.ResponseWriter, r *http.Request) {
+	if s.setupDone(r.Context()) {
+		http.Redirect(w, r, "/dashboard/", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/setup/", http.StatusFound)
 }
 
 func (s *Server) redirectToSetup(w http.ResponseWriter, r *http.Request) {

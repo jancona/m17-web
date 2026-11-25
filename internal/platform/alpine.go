@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -32,10 +33,14 @@ type Alpine struct {
 	// Files it reads.
 	GatewayINI      string
 	DashboardConfig string
-	HostFiles       []string // later files override earlier ones
-	ZoneTab         string
-	HostnameFile    string
-	TimeZoneFile    string
+	// PasswordFile holds the admin password's bcrypt hash. Until it exists
+	// the hash is read from DashboardConfig, rpi-dashboard's config.php
+	// (the password both used before m17-web replaced rpi-dashboard).
+	PasswordFile string
+	HostFiles    []string // later files override earlier ones
+	ZoneTab      string
+	HostnameFile string
+	TimeZoneFile string
 	// ScanCache holds the networks seen before the setup access point
 	// started (the radio can't scan while it is an access point), in the
 	// helper's wifi-scan format.
@@ -63,6 +68,7 @@ func NewAlpine() *Alpine {
 		Helper:          []string{"doas", "-n", "/usr/local/libexec/m17os/admin-helper"},
 		GatewayINI:      "/etc/m17-gateway.ini",
 		DashboardConfig: "/var/lib/m17-dashboard/config.php",
+		PasswordFile:    "/var/lib/m17-web/admin-password",
 		HostFiles:       []string{"/var/lib/m17-gateway/M17Hosts.txt", "/var/lib/m17-gateway/OverrideHosts.txt"},
 		ZoneTab:         "/usr/share/zoneinfo/zone1970.tab",
 		HostnameFile:    "/etc/hostname",
@@ -419,9 +425,14 @@ func (a *Alpine) TimeZones(ctx context.Context) ([]string, error) {
 
 var hashRE = regexp.MustCompile(`'admin_password_hash'\s*=>\s*'([^']*)'`)
 
-// passwordHash reads the admin password's hash from rpi-dashboard's
-// config.php ("" if none).
+// passwordHash reads the admin password's hash: from PasswordFile, else
+// from rpi-dashboard's config.php ("" if none).
 func (a *Alpine) passwordHash() (string, error) {
+	if b, err := os.ReadFile(a.PasswordFile); err == nil {
+		return strings.TrimSpace(string(b)), nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
 	b, err := os.ReadFile(a.DashboardConfig)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
@@ -451,16 +462,41 @@ func (a *Alpine) CheckAdminPassword(password string) (bool, error) {
 }
 
 func (a *Alpine) SetAdminPassword(ctx context.Context, password string) error {
-	res, err := a.Apply(ctx, []Setting{{Key: "dashboard_password", Value: password}})
+	h, err := HashPassword(password)
 	if err != nil {
 		return err
 	}
-	for _, w := range res.Warnings {
-		if strings.Contains(w, "dashboard") {
-			return errors.New(w)
-		}
+	return writeFileAtomic(a.PasswordFile, []byte(h+"\n"), 0o600)
+}
+
+// HashPassword is password's bcrypt hash, as the admin password file holds
+// it (m17-web -hash-password prints it, for m17os-config).
+func HashPassword(password string) (string, error) {
+	h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(h), err
+}
+
+// writeFileAtomic replaces path with data: a temporary file beside it,
+// renamed over it.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
 	}
-	return nil
+	_, err = f.Write(data)
+	if err2 := f.Chmod(mode); err == nil {
+		err = err2
+	}
+	if err2 := f.Close(); err == nil {
+		err = err2
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), path)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
 }
 
 // ── Applying settings ─────────────────────────────────────────────────

@@ -11,6 +11,20 @@ import (
 	"github.com/jancona/m17-web/internal/platform"
 )
 
+// replacedPages are older pages' addresses, and where they are now: the
+// first activity page, and rpi-dashboard's (bookmarks keep working).
+var replacedPages = map[string]string{
+	"/setup/activity":       "/dashboard/",
+	"/index.php":            "/dashboard/",
+	"/map.php":              "/dashboard/map",
+	"/messages.php":         "/dashboard/messages",
+	"/help.php":             "/dashboard/",
+	"/config_gateway.php":   "/admin/expert",
+	"/config_dashboard.php": "/admin/system",
+	"/set_password.php":     "/admin/security",
+	"/login.php":            "/setup/login",
+}
+
 // dashData is what the dashboard shows.
 type dashData struct {
 	// Tab is the dashboard page: "status", "messages" or "map"
@@ -81,10 +95,12 @@ func (s *Server) dashboardRoutes() {
 	s.mux.HandleFunc("GET /dashboard/map/live", s.dashboardLive("map"))
 	s.mux.HandleFunc("GET /dashboard/positions.json", s.positionsJSON)
 	s.mux.HandleFunc("GET /dashboard/events", s.dashboardEvents)
-	// The activity page it replaces
-	s.mux.HandleFunc("GET /setup/activity", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
-	})
+	// The pages they replace: the activity page, and rpi-dashboard's
+	for from, to := range replacedPages {
+		s.mux.HandleFunc("GET "+from, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+		})
+	}
 }
 
 // dashPage builds the dashboard's page data. Like the old dashboard it

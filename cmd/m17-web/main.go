@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,7 +34,25 @@ func main() {
 	debug := flag.Bool("debug", false, "log every request")
 	mqttBroker := flag.String("mqtt", "127.0.0.1:1883", "MQTT broker (host:port) m17-gateway publishes its status to; empty for none")
 	mqttName := flag.String("mqtt-name", "m17-gateway", "m17-gateway's MQTT Name (its topic prefix)")
+	hashPassword := flag.Bool("hash-password", false, "read a password from stdin, print its hash for the admin password file, and exit")
 	flag.Parse()
+
+	if *hashPassword {
+		// For m17os-config, setting the password from m17-config.txt
+		pw, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		pw = strings.TrimRight(pw, "\r\n")
+		if pw == "" {
+			fmt.Fprintln(os.Stderr, "m17-web: no password on stdin", err)
+			os.Exit(2)
+		}
+		h, err := platform.HashPassword(pw)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "m17-web:", err)
+			os.Exit(1)
+		}
+		fmt.Println(h)
+		return
+	}
 
 	level := slog.LevelInfo
 	if *debug {
