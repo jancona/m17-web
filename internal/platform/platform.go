@@ -61,6 +61,9 @@ type Platform interface {
 	// (callsign, wifi_ssid, frequency, ...). Settings that couldn't be
 	// applied come back as warnings; err is for a failure to apply at all.
 	Apply(ctx context.Context, settings []Setting) (Result, error)
+
+	// System is the rest, for the admin pages.
+	System
 }
 
 // Current is the hotspot's current configuration.

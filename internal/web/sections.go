@@ -70,6 +70,28 @@ var sections = map[string]section{
 		},
 		keys: settings.Draft.WiFiKeys,
 	},
+	"wificountry": {
+		ID: "wificountry", Title: "WiFi country",
+		load: func(s *Server, ctx context.Context, p *page) error {
+			p.Countries = settings.Countries
+			return nil
+		},
+		parse: func(s *Server, ctx context.Context, in sectionInput, d *settings.Draft) (settings.Problems, error) {
+			d.UseWiFi = true
+			d.WiFiCountry = strings.ToUpper(in.form.Get("wifi_country"))
+			p := d.CheckNetwork(settings.CountryCodes())
+			// Only the country is checked here
+			for k := range p.Errors {
+				if k != "wifi_country" {
+					delete(p.Errors, k)
+				}
+			}
+			return p, nil
+		},
+		keys: func(d settings.Draft) []platform.Setting {
+			return []platform.Setting{{Key: "wifi_country", Value: d.WiFiCountry}}
+		},
+	},
 	"callsign": {
 		ID: "callsign", Title: "Callsign",
 		parse: func(s *Server, ctx context.Context, in sectionInput, d *settings.Draft) (settings.Problems, error) {

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"slices"
 	"time"
 
@@ -29,6 +30,9 @@ type adminSection struct {
 	Help  string
 	// Button is the submit button's label ("Save" if empty)
 	Button string
+	// Panel sections draw their own forms (lists with Remove buttons,
+	// actions); the page doesn't wrap them in one with a Save button
+	Panel bool
 }
 
 var adminPages = []adminPage{
@@ -41,19 +45,27 @@ var adminPages = []adminPage{
 		{ID: "frequency", Title: "Frequency and power"},
 	}},
 	{ID: "network", Title: "Network", Group: "Setup", Sections: []adminSection{
-		{ID: "wifi", Title: "Connection"},
+		{ID: "wifistatus", Title: "Connection", Panel: true},
+		{ID: "wifinets", Title: "WiFi networks", Panel: true, Help: "The hotspot joins the first of these it finds, newest first."},
+		{ID: "wificountry", Title: "WiFi country"},
 		{ID: "hostname", Title: "Hotspot name"},
 	}},
 	{ID: "updates", Title: "Updates", Group: "Administration", Sections: []adminSection{
+		{ID: "os", Title: "System version", Panel: true},
 		{ID: "updates", Title: "Automatic updates"},
 	}},
 	{ID: "security", Title: "Security", Group: "Administration", Sections: []adminSection{
 		{ID: "adminpw", Title: "Admin password", Button: "Change password"},
+		{ID: "sshkeys", Title: "SSH keys", Panel: true, Help: "Computers holding one of these keys can log in as m17."},
 		{ID: "ssh", Title: "SSH", Help: "Logging in to the hotspot from a computer, as the user m17."},
 	}},
 	{ID: "system", Title: "System", Group: "Administration", Sections: []adminSection{
+		{ID: "sysinfo", Title: "This hotspot", Panel: true},
 		{ID: "timezone", Title: "Time zone"},
 		{ID: "rerun", Title: "Run setup again", Button: "Run setup again"},
+	}},
+	{ID: "logs", Title: "Logs", Group: "Administration", Sections: []adminSection{
+		{ID: "logs", Title: "Logs", Panel: true},
 	}},
 }
 
@@ -144,7 +156,7 @@ func (s *Server) adminAccess(w http.ResponseWriter, r *http.Request, sess *auth.
 }
 
 // newAdminPage builds the page data for admin page ap from draft d.
-func (s *Server) newAdminPage(ctx context.Context, sess *auth.Session, ap adminPage, d settings.Draft) (*page, error) {
+func (s *Server) newAdminPage(ctx context.Context, sess *auth.Session, ap adminPage, d settings.Draft, q url.Values) (*page, error) {
 	set, err := s.plat.AdminPasswordSet()
 	if err != nil {
 		return nil, err
@@ -161,8 +173,15 @@ func (s *Server) newAdminPage(ctx context.Context, sess *auth.Session, ap adminP
 		Errors:      map[string]string{},
 		Warnings:    map[string]string{},
 	}
+	p.Panels.Unsupported = map[string]bool{}
 	for _, sec := range ap.Sections {
-		if err := s.loadSections(ctx, p, sec.ID); err != nil {
+		var err error
+		if sec.Panel {
+			err = s.loadPanel(ctx, p, sec.ID, q)
+		} else {
+			err = s.loadSections(ctx, p, sec.ID)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -201,7 +220,7 @@ func (s *Server) showAdmin(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	p, err := s.newAdminPage(r.Context(), sess, ap, d)
+	p, err := s.newAdminPage(r.Context(), sess, ap, d, r.URL.Query())
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -247,8 +266,16 @@ func (s *Server) submitAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var probs settings.Problems
-	switch id {
-	case "rerun":
+	if sec.Panel {
+		var done bool
+		if probs, done = s.submitPanel(w, r, sess, id, saved); done {
+			return
+		}
+	}
+	switch {
+	case sec.Panel:
+		// problems from the panel: shown below
+	case id == "rerun":
 		// Start the wizard over from the current settings, every step open
 		if err := s.store.Save(wizard.State{Rerun: true}); err != nil {
 			s.fail(w, r, err)
@@ -257,7 +284,7 @@ func (s *Server) submitAdmin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/setup/", http.StatusSeeOther)
 		return
 
-	case "adminpw":
+	case id == "adminpw":
 		okPw, err := s.plat.CheckAdminPassword(f.Get("current"))
 		if err != nil {
 			s.fail(w, r, err)
@@ -278,19 +305,16 @@ func (s *Server) submitAdmin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-	case "hat":
-		if f.Get("action") == "detect" {
-			hat, err := s.plat.DetectHAT(ctx)
-			if err != nil {
-				s.log.Warn("HAT detection failed", "err", err)
-			}
-			s.mu.Lock()
-			s.detected = &detection{HAT: hat, At: time.Now()}
-			s.mu.Unlock()
-			http.Redirect(w, r, back, http.StatusSeeOther)
-			return
+	case id == "hat" && f.Get("action") == "detect":
+		hat, err := s.plat.DetectHAT(ctx)
+		if err != nil {
+			s.log.Warn("HAT detection failed", "err", err)
 		}
-		fallthrough
+		s.mu.Lock()
+		s.detected = &detection{HAT: hat, At: time.Now()}
+		s.mu.Unlock()
+		http.Redirect(w, r, back, http.StatusSeeOther)
+		return
 
 	default:
 		def, ok := sections[id]
@@ -326,10 +350,13 @@ func (s *Server) submitAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Errors: show the page again with what was typed, for this section
-	p, err := s.newAdminPage(ctx, sess, ap, d)
+	p, err := s.newAdminPage(ctx, sess, ap, d, nil)
 	if err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	if id == "wifinets" {
+		p.Panels.NewSSID = f.Get("wifi_ssid_other")
 	}
 	p.Errors, p.Warnings = probs.Errors, probs.Warnings
 	if p.Warnings == nil {

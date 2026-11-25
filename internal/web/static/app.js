@@ -12,6 +12,12 @@
 	function busy() { root.classList.add("busy"); }
 	document.addEventListener("submit", function (e) {
 		if (e.defaultPrevented) return;
+		// Forms that remove, install or restart something ask first
+		var question = e.target.getAttribute("data-confirm");
+		if (question && !window.confirm(question)) {
+			e.preventDefault();
+			return;
+		}
 		busy();
 		var form = e.target;
 		var pressed = e.submitter || form.querySelector("button[type=submit]");

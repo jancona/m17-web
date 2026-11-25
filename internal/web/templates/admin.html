@@ -17,6 +17,13 @@
 	</div>
 	{{end}}
 	{{end}}
+	{{if .Panel}}
+	{{if index $p.Panels.Unsupported .ID}}
+	<p class="warning">This system version can't show this here. Update the hotspot (Updates page, or <code>doas m17os-upgrade --install</code>) to get it.</p>
+	{{else}}
+	{{template "section" (withSection $p .ID)}}
+	{{end}}
+	{{else}}
 	<form method="post" action="/admin/{{$p.AdminPage.ID}}/{{.ID}}">
 		<input type="hidden" name="csrf" value="{{$p.CSRF}}">
 		{{template "section" (withSection $p .ID)}}
@@ -25,6 +32,7 @@
 			<button type="submit">{{or .Button "Save"}}</button>
 		</div>
 	</form>
+	{{end}}
 </section>
 {{end}}
 {{end}}
