@@ -6,7 +6,11 @@
 	{{with .HATType}}<span>{{hatName .}}</span>{{end}}
 </p>
 {{end}}
-<div id="live" data-live="/dashboard/live" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
+{{$tab := .Dash.Tab}}
+<nav class="tabs" aria-label="Dashboard pages">
+	{{range .Dash.Tabs}}<a href="{{.Path}}"{{if eq .ID $tab}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
+</nav>
+<div id="live" data-live="{{if eq $tab "messages"}}/dashboard/messages/live{{else}}/dashboard/live{{end}}" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
 {{template "dash-live" .}}
 </div>
 <script src="/setup/static/dashboard.js" defer></script>
@@ -17,7 +21,42 @@
 {{$d := .Dash}}
 {{if not $d.Live}}
 <div class="notice"><p>Live status is off: the hotspot's web pages were started without an MQTT broker, so they can't hear from the gateway.</p></div>
+{{else if eq $d.Tab "messages"}}
+{{template "dash-messages" $d}}
 {{else}}
+{{template "dash-status" $d}}
+{{end}}
+{{end}}
+
+{{define "dash-messages"}}
+{{if not .Status.Broker}}
+<div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
+{{end}}
+{{if .Messages}}
+<div class="table-wrap">
+<table class="activity messages">
+	<thead><tr><th>Time</th><th>From</th><th>To</th><th>Via</th><th>Message</th></tr></thead>
+	<tbody>
+	{{range .Messages}}
+	<tr>
+		<td data-label="Time">{{clock .Time}}</td>
+		<td data-label="From"><strong>{{.Src}}</strong></td>
+		<td data-label="To">{{.Dst}}</td>
+		<td data-label="Via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</td>
+		<td data-label="Message" class="msg">{{.Text}}</td>
+	</tr>
+	{{end}}
+	</tbody>
+</table>
+</div>
+<p class="hint">The last {{len .Messages}} text message{{if ne (len .Messages) 1}}s{{end}} heard, newest first. The hotspot keeps up to 100.</p>
+{{else}}
+<p>No text messages heard yet.</p>
+{{end}}
+{{end}}
+
+{{define "dash-status"}}
+{{$d := .}}
 {{with $d.Status}}
 <dl class="summary status">
 	<dt>Reflector</dt><dd>{{if .Link}}{{.Link.Describe}}{{else}}not heard yet{{end}}</dd>
@@ -67,6 +106,5 @@
 </div>
 {{else}}
 <p>Nothing heard yet.</p>
-{{end}}
 {{end}}
 {{end}}

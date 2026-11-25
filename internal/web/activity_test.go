@@ -27,7 +27,10 @@ func activityServer(t *testing.T, act *activity.Log) *httptest.Server {
 	if act != nil {
 		srv.SetActivity(act)
 	}
-	ts := httptest.NewServer(srv)
+	ts := httptest.NewUnstartedServer(srv)
+	// Like the real server's, but short, so the event stream test sees it
+	ts.Config.WriteTimeout = time.Second
+	ts.Start()
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -79,6 +82,26 @@ func TestActivity(t *testing.T) {
 	if code != 200 || !strings.Contains(live, "Last heard") || strings.Contains(live, "<html") {
 		t.Errorf("live part: %d\n%s", code, live)
 	}
+	// The messages page: text messages only, escaped
+	if err := act.Handle([]byte(`{"M17Packet":{"timestamp":"2026-11-20T01:10:00Z","source":"network","src_callsign":"AA5RL","dst_callsign":"N1ADJ","protocol":5,"text":"<b>73</b>"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	code, msgs := fetch(t, ts.URL+"/dashboard/messages")
+	if code != 200 {
+		t.Fatalf("GET /dashboard/messages: %d", code)
+	}
+	for _, want := range []string{"<h1>Messages</h1>", ">hi<", "&lt;b&gt;73&lt;/b&gt;", "PARROT", `data-live="/dashboard/messages/live"`,
+		`<a href="/dashboard/messages" aria-current="page">`, "The last 2 text messages"} {
+		if !strings.Contains(msgs, want) {
+			t.Errorf("messages page has no %q", want)
+		}
+	}
+	if strings.Contains(msgs, "81DEAD") || strings.Contains(msgs, "<b>73") {
+		t.Errorf("messages page has a data packet or unescaped text:\n%s", msgs)
+	}
+	if code, live := fetch(t, ts.URL+"/dashboard/messages/live"); code != 200 || !strings.Contains(live, "&lt;b&gt;73") || strings.Contains(live, "<html") {
+		t.Errorf("messages live part: %d\n%s", code, live)
+	}
 	// The old activity page now redirects
 	if code, body := fetch(t, ts.URL+"/setup/activity"); code != 200 || !strings.Contains(body, "Last heard") {
 		t.Errorf("/setup/activity: %d", code)
@@ -95,7 +118,7 @@ func TestActivity(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Entries) != 4 || got.Entries[3].Src != "N1ADJ" || got.Status.Link.Reason != "rejected" || got.Status.ModemOpen == nil || !*got.Status.ModemOpen {
+	if len(got.Entries) != 5 || got.Entries[4].Src != "N1ADJ" || got.Status.Link.Reason != "rejected" || got.Status.ModemOpen == nil || !*got.Status.ModemOpen {
 		t.Errorf("API: %s", body)
 	}
 }
@@ -104,8 +127,10 @@ func TestActivity(t *testing.T) {
 // off, and the API isn't there.
 func TestNoActivity(t *testing.T) {
 	ts := activityServer(t, nil)
-	if code, body := fetch(t, ts.URL+"/dashboard/"); code != 200 || !strings.Contains(body, "Live status is off") || strings.Contains(body, `data-events="/`) {
-		t.Errorf("dashboard without a broker: %d\n%s", code, body)
+	for _, p := range []string{"/dashboard/", "/dashboard/messages"} {
+		if code, body := fetch(t, ts.URL+p); code != 200 || !strings.Contains(body, "Live status is off") || strings.Contains(body, `data-events="/`) {
+			t.Errorf("%s without a broker: %d\n%s", p, code, body)
+		}
 	}
 	for _, p := range []string{"/setup/api/activity", "/dashboard/events"} {
 		if code, _ := fetch(t, ts.URL+p); code != 404 {
@@ -140,7 +165,8 @@ func TestDashboardEvents(t *testing.T) {
 			}
 		}
 	}()
-	time.Sleep(100 * time.Millisecond) // the stream is open
+	// Past the server's write timeout: the stream must outlast it
+	time.Sleep(1500 * time.Millisecond)
 	if err := act.Handle([]byte(`{"MMDVM":{"timestamp":"2026-11-25T12:00:00Z","mode":"M17"}}`)); err != nil {
 		t.Fatal(err)
 	}

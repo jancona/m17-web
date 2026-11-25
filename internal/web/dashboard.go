@@ -12,12 +12,26 @@ import (
 
 // dashData is what the dashboard shows.
 type dashData struct {
+	// Tab is the dashboard page: "status" or "messages"
+	Tab     string
+	Tabs    []dashTab
 	Station platform.Current
 	// Live is false when m17-web runs without an MQTT broker
 	Live    bool
 	Status  activity.Status
 	OnAir   []activity.Entry // being heard now
 	Entries []activity.Entry // last heard, newest first
+	// Messages are the text messages, newest first (messages tab)
+	Messages []activity.Entry
+}
+
+// dashTab is one of the dashboard's pages.
+type dashTab struct{ ID, Path, Title string }
+
+// dashTabs are the dashboard's pages.
+var dashTabs = []dashTab{
+	{"status", "/dashboard/", "Dashboard"},
+	{"messages", "/dashboard/messages", "Messages"},
 }
 
 // dashEntries is how many last-heard entries the dashboard shows.
@@ -31,8 +45,10 @@ func (s *Server) dashboardRoutes() {
 	s.mux.HandleFunc("GET /dashboard", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dashboard/", http.StatusFound)
 	})
-	s.mux.HandleFunc("GET /dashboard/{$}", s.dashboard)
-	s.mux.HandleFunc("GET /dashboard/live", s.dashboardLive)
+	s.mux.HandleFunc("GET /dashboard/{$}", s.dashboard("status"))
+	s.mux.HandleFunc("GET /dashboard/live", s.dashboardLive("status"))
+	s.mux.HandleFunc("GET /dashboard/messages", s.dashboard("messages"))
+	s.mux.HandleFunc("GET /dashboard/messages/live", s.dashboardLive("messages"))
 	s.mux.HandleFunc("GET /dashboard/events", s.dashboardEvents)
 	// The activity page it replaces
 	s.mux.HandleFunc("GET /setup/activity", func(w http.ResponseWriter, r *http.Request) {
@@ -42,14 +58,25 @@ func (s *Server) dashboardRoutes() {
 
 // dashPage builds the dashboard's page data. Like the old dashboard it
 // needs no login: it shows only what's on the air.
-func (s *Server) dashPage(w http.ResponseWriter, r *http.Request) (*page, error) {
+func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*page, error) {
 	sess := s.sessions.Get(w, r)
 	cur, err := s.plat.Current(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	d := dashData{Station: cur, Live: s.activity != nil}
-	if s.activity != nil {
+	d := dashData{Tab: tab, Tabs: dashTabs, Station: cur, Live: s.activity != nil}
+	title := "Dashboard"
+	for _, t := range dashTabs {
+		if t.ID == tab {
+			title = t.Title
+		}
+	}
+	switch {
+	case s.activity == nil:
+	case tab == "messages":
+		d.Status, _ = s.activity.Snapshot()
+		d.Messages = s.activity.Messages()
+	default:
 		var entries []activity.Entry
 		d.Status, entries = s.activity.Snapshot()
 		for _, e := range entries {
@@ -59,33 +86,37 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request) (*page, error)
 		}
 		d.Entries = entries[:min(len(entries), dashEntries)]
 	}
-	return &page{Title: "Dashboard", Public: true, Dash: &d, LoggedIn: sess.LoggedIn, CSRF: sess.CSRF, NoScriptRefresh: 15}, nil
+	return &page{Title: title, Public: true, Dash: &d, LoggedIn: sess.LoggedIn, CSRF: sess.CSRF, NoScriptRefresh: 15}, nil
 }
 
-func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
-	p, err := s.dashPage(w, r)
-	if err != nil {
-		s.fail(w, r, err)
-		return
+func (s *Server) dashboard(tab string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, err := s.dashPage(w, r, tab)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		s.render(w, r, http.StatusOK, "dashboard", p)
 	}
-	s.render(w, r, http.StatusOK, "dashboard", p)
 }
 
 // dashboardLive is the live part of the dashboard alone, which the page's
 // script fetches when the event stream says something changed.
-func (s *Server) dashboardLive(w http.ResponseWriter, r *http.Request) {
-	p, err := s.dashPage(w, r)
-	if err != nil {
-		s.fail(w, r, err)
-		return
+func (s *Server) dashboardLive(tab string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, err := s.dashPage(w, r, tab)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		var b strings.Builder
+		if err := s.pages["dashboard"].ExecuteTemplate(&b, "dash-live", p); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(b.String()))
 	}
-	var b strings.Builder
-	if err := s.pages["dashboard"].ExecuteTemplate(&b, "dash-live", p); err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(b.String()))
 }
 
 // dashboardEvents is a Server-Sent Events stream: an "update" event each
@@ -100,6 +131,11 @@ func (s *Server) dashboardEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		http.Error(w, "streaming isn't supported", http.StatusInternalServerError)
 		return
+	}
+	// The server's write timeout is for ordinary pages: this stream stays
+	// open until the browser goes
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+		s.log.Warn("dashboard events: can't clear the write deadline", "err", err)
 	}
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
