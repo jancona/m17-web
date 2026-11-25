@@ -100,6 +100,9 @@ type Log struct {
 	current map[string]*Entry // voice in progress, by source
 	status  Status
 	dirty   bool
+	// changed is closed (and replaced) whenever the log changes, so any
+	// number of watchers can wait for the next change
+	changed chan struct{}
 }
 
 // New returns an empty log saved to path ("" keeps it in memory only).
@@ -107,7 +110,21 @@ func New(path string, max int) *Log {
 	if max <= 0 {
 		max = DefaultMax
 	}
-	return &Log{path: path, max: max, now: time.Now, current: map[string]*Entry{}}
+	return &Log{path: path, max: max, now: time.Now, current: map[string]*Entry{}, changed: make(chan struct{})}
+}
+
+// Changed returns a channel that is closed at the log's next change (a
+// message from the gateway, the broker connection going up or down).
+func (l *Log) Changed() <-chan struct{} {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.changed
+}
+
+// notify wakes the watchers. l.mu must be held.
+func (l *Log) notify() {
+	close(l.changed)
+	l.changed = make(chan struct{})
 }
 
 // Load reads the saved log. A missing file is not an error.
@@ -181,7 +198,10 @@ func (l *Log) Save() error {
 // SetBroker records whether the broker connection is up.
 func (l *Log) SetBroker(up bool) {
 	l.mu.Lock()
-	l.status.Broker = up
+	if l.status.Broker != up {
+		l.status.Broker = up
+		l.notify()
+	}
 	l.mu.Unlock()
 }
 
@@ -262,6 +282,7 @@ func (l *Log) Handle(payload []byte) error {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	defer l.notify()
 	l.status.Heard = l.now()
 	for typ, raw := range m {
 		var err error

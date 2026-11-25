@@ -166,3 +166,31 @@ func TestGatewayRunning(t *testing.T) {
 		}
 	}
 }
+
+// TestChanged: a message wakes every watcher; nothing else does.
+func TestChanged(t *testing.T) {
+	l := New("", 0)
+	a, b := l.Changed(), l.Changed()
+	select {
+	case <-a:
+		t.Fatal("woken without a change")
+	default:
+	}
+	if err := l.Handle([]byte(`{"MMDVM":{"timestamp":"2026-11-25T12:00:00Z","mode":"idle"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []<-chan struct{}{a, b} {
+		select {
+		case <-c:
+		default:
+			t.Error("a watcher wasn't woken")
+		}
+	}
+	c := l.Changed()
+	l.SetBroker(true)
+	select {
+	case <-c:
+	default:
+		t.Error("the broker coming up didn't wake the watcher")
+	}
+}

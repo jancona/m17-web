@@ -246,3 +246,21 @@ table.activity tr.active td { background: var(--ok-bg); font-weight: 600; }
 .hcard.warn { border-color: var(--warn-line); background: var(--warn-bg); }
 .hcard.info { border-color: var(--accent); }
 .hcard a { white-space: nowrap; }
+
+/* Dashboard */
+.station { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0 0 12px; }
+.station .call { font-size: 1.3rem; }
+.station span { color: var(--muted); }
+dl.status { margin-top: 0; }
+.onair { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 12px; margin: 8px 0; border-radius: 8px; background: var(--ok-bg); border: 1px solid var(--ok-line); font-size: 1.05rem; }
+.onair .dot { width: 10px; height: 10px; border-radius: 50%; background: #2ea043; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .onair .dot { animation: none; } }
+@media (max-width: 560px) {
+	/* The last-heard table as a list of entries */
+	table.activity thead { display: none; }
+	table.activity tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--line); }
+	table.activity td { display: inline-block; border: 0; padding: 2px 8px 2px 0; white-space: normal; }
+	table.activity td[data-label=Time] { display: block; color: var(--muted); font-size: 12px; }
+	table.activity td[data-label=BER]:not(:empty)::before, table.activity td[data-label=Length]:not(:empty)::before { content: attr(data-label) " "; color: var(--muted); }
+}

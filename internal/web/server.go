@@ -88,11 +88,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /setup/login", s.login)
 	s.mux.HandleFunc("POST /setup/logout", s.logout)
 	s.mux.HandleFunc("GET /setup/done", s.done)
-	s.mux.HandleFunc("GET /setup/activity", s.activityPage)
 	s.mux.HandleFunc("GET /setup/api/activity", s.activityJSON)
 	s.mux.HandleFunc("GET /setup/{step}", s.showStep)
 	s.mux.HandleFunc("POST /setup/{step}", s.submitStep)
 	s.adminRoutes()
+	s.dashboardRoutes()
 
 	// Captive-portal checks. While the setup access point is up, nginx
 	// sends every host name here; answering these with a redirect makes
@@ -130,6 +130,13 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Flush passes on flushes, for the dashboard's event stream.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 func (s *Server) redirectToSetup(w http.ResponseWriter, r *http.Request) {
@@ -546,6 +553,12 @@ type page struct {
 	ID string
 	// Panels is what the admin pages' panels show
 	Panels panelData
+	// Public is a page anyone may see (the dashboard); Dash is its data
+	Public bool
+	Dash   *dashData
+	// NoScriptRefresh, if set, reloads the page after this many seconds
+	// when JavaScript is off (the dashboard's script updates it live)
+	NoScriptRefresh int
 	// Health is what's wrong, shown as cards on the admin pages
 	Health []platform.Problem
 	// GatewayModem is what the gateway reported about the HAT when it
@@ -564,6 +577,18 @@ type page struct {
 
 func (s *Server) parseTemplates() error {
 	funcs := template.FuncMap{
+		"hz": func(hz int64) float64 { return float64(hz) / 1e6 },
+		"hatName": func(t string) string {
+			switch t {
+			case "cc1200":
+				return "CC1200 HAT"
+			case "sx1255":
+				return "SX1255 HAT"
+			case "mmdvm":
+				return "MMDVM board"
+			}
+			return t
+		},
 		"mhz": func(f float64) string {
 			if f <= 0 || f != f {
 				return ""

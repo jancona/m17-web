@@ -5,16 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · M17 hotspot</title>
 {{if and .Refresh .RefreshURL}}<meta http-equiv="refresh" content="{{.Refresh}};url={{.RefreshURL}}">{{else if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}
+{{with .NoScriptRefresh}}<noscript><meta http-equiv="refresh" content="{{.}}"></noscript>{{end}}
 <link rel="stylesheet" href="/setup/static/style.css">
 <script src="/setup/static/app.js" defer></script>
 </head>
 <body{{if .Admin}} class="admin"{{end}}>
 <div class="busybar" aria-hidden="true"></div>
 <header class="top">
-	<div class="brand">M17 hotspot <span>{{if .Admin}}admin{{else}}setup{{end}}</span></div>
+	<div class="brand">M17 hotspot <span>{{if .Admin}}admin{{else if .Public}}dashboard{{else}}setup{{end}}</span></div>
 	<div class="toplinks">
-		<a href="/">Dashboard</a>
-		{{if and .LoggedIn (not .Admin)}}<a href="/admin/">Admin</a>{{end}}
+		{{if not .Public}}<a href="/">Dashboard</a>{{end}}
+		{{if and .LoggedIn (not .Admin)}}<a href="/admin/">Admin</a>{{else if .Public}}<a href="/admin/">Admin</a>{{end}}
 		{{if .LoggedIn}}
 		<form method="post" action="/setup/logout" class="logout">
 			<input type="hidden" name="csrf" value="{{.CSRF}}">
