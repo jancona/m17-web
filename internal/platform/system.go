@@ -48,6 +48,10 @@ type System interface {
 	Reboot(ctx context.Context) error
 	// Shutdown powers it off, a few seconds after the call returns.
 	Shutdown(ctx context.Context) error
+
+	// Health lists what's wrong: the gateway not running or without its
+	// modem, no network, an update waiting for a restart, ...
+	Health(ctx context.Context) ([]Problem, error)
 }
 
 // ErrUnsupported is returned by a System method on a system too old for it
@@ -155,3 +159,26 @@ func parseKV(out string) (map[string]string, []string) {
 	}
 	return kv, log
 }
+
+// activeVersion is the version in the active slot: the one the hotspot
+// boots next.
+func (st OSStatus) activeVersion() string {
+	if st.ActiveSlot == "B" {
+		return st.SlotB
+	}
+	return st.SlotA
+}
+
+// AwaitingRestart is the version installed to the active slot but not
+// running yet ("" if none): m17os-upgrade makes the new slot active (and
+// pending) before the restart.
+func (st OSStatus) AwaitingRestart() string {
+	if v := st.activeVersion(); v != "" && st.Running != "" && v != st.Running {
+		return v
+	}
+	return ""
+}
+
+// Checking reports whether the running version is new and the health
+// check hasn't passed it yet.
+func (st OSStatus) Checking() bool { return st.Pending && st.AwaitingRestart() == "" }

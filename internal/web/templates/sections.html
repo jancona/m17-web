@@ -415,7 +415,7 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 	{{with index .Errors "os"}}<p class="error">{{.}}</p>{{end}}
 	<dl class="summary">
 		<dt>Running</dt><dd>{{or $os.Running "unknown"}}{{with $os.ActiveSlot}} (slot {{.}}){{end}}</dd>
-		{{if $os.Pending}}<dt>Status</dt><dd>New: checking it starts properly (try {{$os.BootTries}})</dd>{{end}}
+		{{with $os.AwaitingRestart}}<dt>Installed</dt><dd>{{.}}: restart to start it</dd>{{else}}{{if $os.Checking}}<dt>Status</dt><dd>New: checking it starts properly (try {{$os.BootTries}})</dd>{{end}}{{end}}
 		{{with $os.PreviousVersion}}<dt>Previous</dt><dd>{{.}} (slot {{$os.PreviousSlot}})</dd>{{end}}
 		{{with $os.LastUpdate}}{{with index . "RESULT"}}<dt>Last automatic check</dt><dd>{{updateResult .}}{{with index $os.LastUpdate "TIME"}}, {{.}}{{end}}</dd>{{end}}{{end}}
 	</dl>

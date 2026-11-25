@@ -50,6 +50,8 @@ type Alpine struct {
 	// Files are what the admin pages read (unset ones are the standard
 	// paths).
 	Files SystemFiles
+	// HealthPaths are the further files Health reads.
+	HealthPaths HealthFiles
 
 	probeMu sync.Mutex
 }
