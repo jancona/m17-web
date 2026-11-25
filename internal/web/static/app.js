@@ -5,6 +5,42 @@
 	var root = document.documentElement;
 	root.classList.add("js");
 
+	// Busy: some pages take a few seconds (asking the HAT stops the
+	// gateway, applying settings restarts it), so show that something is
+	// happening from the moment a form is sent or a page link followed,
+	// and don't let a second press send it twice.
+	function busy() { root.classList.add("busy"); }
+	document.addEventListener("submit", function (e) {
+		if (e.defaultPrevented) return;
+		busy();
+		var form = e.target;
+		var pressed = e.submitter || form.querySelector("button[type=submit]");
+		if (pressed) {
+			pressed.classList.add("working");
+			pressed.setAttribute("aria-busy", "true");
+		}
+		// After this event, so the pressed button's name and value are sent
+		setTimeout(function () {
+			form.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+		}, 0);
+	});
+	document.addEventListener("click", function (e) {
+		var a = e.target.closest && e.target.closest("a[href]");
+		if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		if (a.target || a.origin !== location.origin) return;
+		if (a.pathname === location.pathname && a.search === location.search && a.hash) return; // same page
+		busy();
+	});
+	// Back to a page kept by the browser: it's no longer busy
+	window.addEventListener("pageshow", function () {
+		root.classList.remove("busy");
+		document.querySelectorAll("button.working").forEach(function (b) {
+			b.classList.remove("working");
+			b.removeAttribute("aria-busy");
+		});
+		document.querySelectorAll("form button[disabled]").forEach(function (b) { b.disabled = false; });
+	});
+
 	function onReady(fn) {
 		if (document.readyState !== "loading") fn();
 		else document.addEventListener("DOMContentLoaded", fn);

@@ -1,29 +1,7 @@
 {{define "content"}}
-<p>SSH lets you log in to the hotspot from a computer, as the user <strong>m17</strong>, to look at logs or change things the wizard doesn't cover. You can skip this step if you don't need it.</p>
 <form method="post" action="/setup/ssh">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-
-	<label for="ssh_key">Add an SSH public key</label>
-	<textarea id="ssh_key" name="ssh_key" rows="4" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="ssh-ed25519 AAAA… you@computer">{{.Draft.SSHKey}}</textarea>
-	<p class="hint">The contents of a <code>.pub</code> file, such as <code>~/.ssh/id_ed25519.pub</code>. {{if gt .Draft.SSHKeys 0}}The hotspot already has {{.Draft.SSHKeys}} key{{if gt .Draft.SSHKeys 1}}s{{end}}; they stay.{{end}}</p>
-	{{with index .Errors "ssh_key"}}<p class="error">{{.}}</p>{{end}}
-	{{with index .Warnings "ssh_key"}}<p class="warning">{{.}}</p>{{end}}
-
-	<label class="choice"><input type="checkbox" name="ssh_password_logins" {{if .Draft.SSHPasswordLogins}}checked{{end}}>
-		<span>Allow password logins<br><span class="hint">Keys are safer. Allow passwords if you'd rather not set up a key.</span></span></label>
-
-	<label for="user_password">New password for m17</label>
-	<input id="user_password" name="user_password" type="password" autocomplete="new-password">
-	<p class="hint">{{if .Draft.UserPassword}}A new password is set; leave this empty to keep it.{{else}}Needed to allow password logins. Leave it empty to keep the current one.{{end}}</p>
-	{{with index .Errors "user_password"}}<p class="error">{{.}}</p>{{end}}
-
-	<label for="user_confirm">Type it again</label>
-	<input id="user_confirm" name="user_confirm" type="password" autocomplete="new-password" data-confirms="user_password">
-	{{with index .Errors "user_confirm"}}<p class="error" id="user_confirm-err">{{.}}</p>{{end}}
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-ssh" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}

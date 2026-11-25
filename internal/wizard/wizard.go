@@ -75,6 +75,10 @@ type State struct {
 	// FlashSeen is the start time of the last firmware flash whose end
 	// this wizard has seen (and asked the HAT again what it runs).
 	FlashSeen int64 `json:"flash_seen,omitempty"`
+	// Rerun is set when setup is run again after it was done once (Run
+	// setup again on the System page): every step may then be opened in
+	// any order, since each already has a value.
+	Rerun bool `json:"rerun,omitempty"`
 	// Steps are the IDs of the wizard's steps when the state was saved,
 	// and Saved when: progress from another version of the wizard, or
 	// from a run left unfinished long ago, isn't resumed (see Load).
@@ -103,11 +107,14 @@ func (s *State) FirstOpen() string {
 }
 
 // Reachable reports whether step id may be shown: every step before it is
-// done.
+// done, or setup is being run again.
 func (s *State) Reachable(id string) bool {
 	i := Index(id)
 	if i < 0 {
 		return false
+	}
+	if s.Rerun {
+		return true
 	}
 	for _, st := range Steps[:i] {
 		if !s.IsDone(st.ID) {
@@ -131,6 +138,25 @@ type Store struct {
 // NewStore keeps the state in dir/wizard.json.
 func NewStore(dir string) *Store {
 	return &Store{path: filepath.Join(dir, "wizard.json"), MaxAge: 24 * time.Hour, Now: time.Now}
+}
+
+// doneMarker is the file that records that setup was applied once.
+func (st *Store) doneMarker() string { return filepath.Join(filepath.Dir(st.path), "setup-done") }
+
+// SetupDone reports whether setup has been applied on this hotspot (by
+// this program: a hotspot set up before the marker existed has a callsign,
+// which the caller checks too).
+func (st *Store) SetupDone() bool {
+	_, err := os.Stat(st.doneMarker())
+	return err == nil
+}
+
+// MarkSetupDone records that setup has been applied.
+func (st *Store) MarkSetupDone() error {
+	if err := os.MkdirAll(filepath.Dir(st.path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(st.doneMarker(), []byte(st.Now().Format(time.RFC3339)+"\n"), 0o600)
 }
 
 func stepIDs() []string {

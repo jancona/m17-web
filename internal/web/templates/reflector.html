@@ -1,37 +1,7 @@
 {{define "content"}}
 <form method="post" action="/setup/reflector">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-	<p>The reflector links your hotspot to other M17 users over the internet. You can change it later on the dashboard's Gateway page.</p>
-
-	<fieldset>
-		<legend>Reflector</legend>
-		<label for="reflector-filter" class="js-only sub">Search</label>
-		<input id="reflector-filter" type="search" class="js-only" placeholder="e.g. M17-USA" autocomplete="off"
-			autocapitalize="characters" data-filter="reflectors">
-		{{$r := .Draft.Reflector}}
-		<ul class="choices scroll" id="reflectors">
-			<li><label class="choice"><input type="radio" name="reflector" value="" {{if eq $r ""}}checked{{end}}>
-				<span>None: RF only, no internet link</span></label></li>
-			{{range .Reflectors}}
-			<li data-name="{{.Name}}"><label class="choice"><input type="radio" name="reflector" value="{{.Name}}" {{if eq .Name $r}}checked{{end}}>
-				<span>{{.Name}}</span></label></li>
-			{{end}}
-		</ul>
-		<p class="hint js-only" id="reflectors-none" hidden>No reflector matches.</p>
-	</fieldset>
-	{{with index .Errors "reflector"}}<p class="error">{{.}}</p>{{end}}
-
-	<label for="module">Module</label>
-	{{$m := .Draft.Module}}
-	<select id="module" name="module" class="short" {{with index .Errors "module"}}aria-invalid="true"{{end}}>
-		{{range modules}}<option {{if eq . $m}}selected{{end}}>{{.}}</option>{{end}}
-	</select>
-	<p class="hint">Each reflector has rooms, A to Z. Ask your local group which one they use.</p>
-	{{with index .Errors "module"}}<p class="error">{{.}}</p>{{end}}
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-reflector" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}
