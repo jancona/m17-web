@@ -105,7 +105,9 @@ func TestDashboardFilters(t *testing.T) {
 	ts := activityServer(t, act)
 	// DK1MI is on air: the card says so, with a running length
 	_, body := fetch(t, ts.URL+"/dashboard/")
-	for _, want := range []string{`aria-label="On air now"`, `class="caller live"`, `data-since="2026-11-25T10:01:00Z"`, "radio transmitting"} {
+	// Network traffic is "Network", the reflector's and the hotspot's own
+	for _, want := range []string{`aria-label="On air now"`, `class="caller live"`, `data-since="2026-11-25T10:01:00Z"`, "radio transmitting",
+		"<dt>Via</dt><dd>Network</dd>", ">Network</a>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard has no %q", want)
 		}
