@@ -537,6 +537,12 @@ type page struct {
 	Notice    *notice
 	// ID is the section being rendered by the "section" template
 	ID string
+	// Panels is what the admin pages' panels show
+	Panels panelData
+	// Message is the text of the message page; RefreshURL, if set, is
+	// where Refresh goes
+	Message    string
+	RefreshURL string
 	// Refresh, if set, reloads the page after this many seconds
 	Refresh int
 }
@@ -565,8 +571,27 @@ func (s *Server) parseTemplates() error {
 		},
 		"familyTitle": firmware.FamilyTitle,
 		"withSection": withSection,
-		"stepIndex":   func(id string) int { return wizard.Index(id) + 1 },
-		"done":        func(st *wizard.State, id string) bool { return st != nil && st.IsDone(id) },
+		"dict": func(kv ...any) map[string]any {
+			m := map[string]any{}
+			for i := 0; i+1 < len(kv); i += 2 {
+				m[fmt.Sprint(kv[i])] = kv[i+1]
+			}
+			return m
+		},
+		"updateAvailable": updateAvailable,
+		"updateResult":    updateResult,
+		"connectedNote": func(w platform.WiFiStatus, ssid string) string {
+			if w.Connected() && w.SSID == ssid {
+				return " The hotspot is connected to it now, so it will disconnect."
+			}
+			return ""
+		},
+		"uptime":    formatUptime,
+		"bytes":     formatBytes,
+		"logTitle":  func(name string) string { return logTitles[name] },
+		"logHelp":   func(name string) string { return logHelps[name] },
+		"stepIndex": func(id string) int { return wizard.Index(id) + 1 },
+		"done":      func(st *wizard.State, id string) bool { return st != nil && st.IsDone(id) },
 		"signalBars": func(dbm int) string {
 			switch {
 			case dbm >= -55:

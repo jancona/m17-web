@@ -25,6 +25,7 @@ type Fake struct {
 	hat          HAT
 	reflectors   []Reflector
 	passwordHash []byte
+	sys          fakeSystem
 
 	// Applied records every Apply call, for tests.
 	Applied [][]Setting
@@ -48,6 +49,7 @@ type Fake struct {
 // NewFake returns a Fake in its unconfigured state.
 func NewFake() *Fake {
 	return &Fake{
+		sys: newFakeSystem(),
 		current: Current{
 			Hostname:    "m17-hotspot",
 			TimeZone:    "UTC",
@@ -278,7 +280,11 @@ func (f *Fake) Apply(ctx context.Context, settings []Setting) (Result, error) {
 		case s.Key == "auto_update":
 			f.current.AutoUpdate = s.Value
 		case s.Key == "ssh_key":
-			f.current.SSHKeys++
+			if typ, key, ok := strings.Cut(s.Value, " "); ok {
+				key, comment, _ := strings.Cut(key, " ")
+				f.sys.keys = append(f.sys.keys, SSHKey{Type: typ, Key: key, Comment: comment})
+			}
+			f.current.SSHKeys = len(f.sys.keys)
 		case s.Key == "enable_ssh_password":
 			f.current.SSHPasswordLogins = s.Value == "true"
 		}

@@ -53,7 +53,7 @@ func TestAdminAfterSetup(t *testing.T) {
 			t.Fatalf("/admin/%s: %d\n%s", p.ID, code, body)
 		}
 		for _, s := range p.Sections {
-			if !strings.Contains(body, `action="/admin/`+p.ID+`/`+s.ID+`"`) {
+			if !s.Panel && !strings.Contains(body, `action="/admin/`+p.ID+`/`+s.ID+`"`) {
 				t.Errorf("/admin/%s has no form for %s", p.ID, s.ID)
 			}
 		}
@@ -178,5 +178,126 @@ func TestRerunSetup(t *testing.T) {
 	_, _, body = h.get(h.client, "/setup/station")
 	if !strings.Contains(body, `value="N1ADJ"`) {
 		t.Error("the re-run doesn't start from the current settings")
+	}
+}
+
+// TestAdminWiFiNetworks: saved networks are listed, added (keeping the
+// others) and removed.
+func TestAdminWiFiNetworks(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+
+	_, _, body := h.get(h.client, "/admin/network")
+	if !strings.Contains(body, "Shack") || !strings.Contains(body, "connected") {
+		t.Fatalf("saved networks not listed:\n%s", body)
+	}
+	code, loc, _ := h.postFrom(h.client, "/admin/network", "/admin/network/wifinets",
+		url.Values{"action": {"add"}, "wifi_ssid": {"-other-"}, "wifi_ssid_other": {"Field Day"}, "wifi_password": {"fd-secret-1"}})
+	h.expectRedirect(code, loc, "/admin/network#wifinets")
+	saved, _ := h.fake.SavedWiFi(t.Context())
+	if len(saved) != 3 || saved[0].SSID != "Field Day" || saved[0].Open {
+		t.Errorf("after adding: %+v", saved)
+	}
+	// A short password is refused, and nothing is added
+	code, _, body = h.postFrom(h.client, "/admin/network", "/admin/network/wifinets",
+		url.Values{"action": {"add"}, "wifi_ssid": {"-other-"}, "wifi_ssid_other": {"Short"}, "wifi_password": {"abc"}})
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "8 to 63") || !strings.Contains(body, `value="Short"`) {
+		t.Errorf("short password: %d", code)
+	}
+	code, loc, _ = h.postFrom(h.client, "/admin/network", "/admin/network/wifinets", url.Values{"action": {"remove"}, "ssid": {"Shack"}})
+	h.expectRedirect(code, loc, "/admin/network#wifinets")
+	saved, _ = h.fake.SavedWiFi(t.Context())
+	if len(saved) != 2 || slices.ContainsFunc(saved, func(n platform.SavedNetwork) bool { return n.SSID == "Shack" }) {
+		t.Errorf("after removing: %+v", saved)
+	}
+}
+
+// TestAdminSSHKeys: the keys added by the wizard are listed with their
+// fingerprints, and can be removed.
+func TestAdminSSHKeys(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	keys, _ := h.fake.SSHKeys(t.Context())
+	if len(keys) != 1 {
+		t.Fatalf("the wizard's key: %+v", keys)
+	}
+	_, _, body := h.get(h.client, "/admin/security")
+	if !strings.Contains(body, "jim@mac") || !strings.Contains(body, keys[0].Fingerprint()) {
+		t.Fatalf("key not listed:\n%s", body)
+	}
+	code, loc, _ := h.postFrom(h.client, "/admin/security", "/admin/security/sshkeys", url.Values{"action": {"remove"}, "key": {keys[0].Key}})
+	h.expectRedirect(code, loc, "/admin/security#sshkeys")
+	if keys, _ := h.fake.SSHKeys(t.Context()); len(keys) != 0 {
+		t.Errorf("key not removed: %+v", keys)
+	}
+}
+
+// TestAdminOSUpdate: check, install, then restart.
+func TestAdminOSUpdate(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+
+	_, _, body := h.get(h.client, "/admin/updates")
+	if !strings.Contains(body, "2026.11.23.1") || !strings.Contains(body, "Go back to 2026.11.20.1") {
+		t.Fatalf("OS status not shown:\n%s", body)
+	}
+	code, loc, _ := h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"check"}})
+	h.expectRedirect(code, loc, "/admin/updates#os")
+	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, "Update available: 2026.11.25.1") {
+		t.Fatalf("check result not shown:\n%s", body)
+	}
+	h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"install"}})
+	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, "The update is installed") {
+		t.Fatalf("install result not shown:\n%s", body)
+	}
+	code, _, body = h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"reboot"}})
+	if code != 200 || !strings.Contains(body, "Restarting") {
+		t.Errorf("restart: %d", code)
+	}
+	if r, _ := h.fake.Counts(); r != 1 {
+		t.Errorf("reboots: %d", r)
+	}
+}
+
+// TestAdminSystemAndLogs: the system panel, shut down, and each log.
+func TestAdminSystemAndLogs(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+
+	_, _, body := h.get(h.client, "/admin/system")
+	for _, want := range []string{"Raspberry Pi Zero 2 W", "MMDVM_HS_Dual_Hat", "°C", "free of"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("system panel lacks %q", want)
+		}
+	}
+	code, _, body := h.postFrom(h.client, "/admin/system", "/admin/system/sysinfo", url.Values{"action": {"shutdown"}})
+	if code != 200 || !strings.Contains(body, "shutting down") {
+		t.Errorf("shutdown: %d", code)
+	}
+	if _, s := h.fake.Counts(); s != 1 {
+		t.Errorf("shutdowns: %d", s)
+	}
+	for _, name := range platform.LogNames {
+		code, _, body := h.get(h.client, "/admin/logs?log="+name)
+		if code != 200 || !strings.Contains(body, `aria-current="page">`+logTitles[name]) {
+			t.Errorf("log %s: %d", name, code)
+		}
+	}
+	if _, _, body = h.get(h.client, "/admin/logs?log=../../etc/passwd"); !strings.Contains(body, "health-check") {
+		t.Error("an unknown log name doesn't fall back to the events log")
+	}
+}
+
+// TestAdminOldSystem: on an image whose admin helper predates the panels,
+// they say so instead of failing.
+func TestAdminOldSystem(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	h.fake.SetUnsupported(true)
+	for _, p := range []string{"/admin/network", "/admin/security", "/admin/updates", "/admin/logs?log=system"} {
+		code, _, body := h.get(h.client, p)
+		if code != 200 || !strings.Contains(body, "This system version can") {
+			t.Errorf("%s on an old system: %d", p, code)
+		}
 	}
 }

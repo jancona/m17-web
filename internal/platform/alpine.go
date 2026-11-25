@@ -47,6 +47,9 @@ type Alpine struct {
 	FirmwareDir string
 	// Probe identifies the HAT on a serial port.
 	Probe func(port string) (hat.Result, error)
+	// Files are what the admin pages read (unset ones are the standard
+	// paths).
+	Files SystemFiles
 
 	probeMu sync.Mutex
 }

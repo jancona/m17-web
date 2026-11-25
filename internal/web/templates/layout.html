@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · M17 hotspot</title>
-{{with .Refresh}}<meta http-equiv="refresh" content="{{.}}">{{end}}
+{{if and .Refresh .RefreshURL}}<meta http-equiv="refresh" content="{{.Refresh}};url={{.RefreshURL}}">{{else if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}
 <link rel="stylesheet" href="/setup/static/style.css">
 <script src="/setup/static/app.js" defer></script>
 </head>

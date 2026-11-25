@@ -215,3 +215,19 @@ button.working::after { content: ""; display: inline-block; width: .9em; height:
 	button.working::after { animation: none; }
 }
 .busy body { cursor: progress; }
+
+/* Admin panels: lists with a button on each line, tabs, logs */
+ul.list { list-style: none; margin: 8px 0; padding: 0; }
+ul.list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+ul.list li:first-child { border-top: 0; }
+ul.list .grow { flex: 1; min-width: 0; word-break: break-word; }
+form.inline { margin: 0; display: inline; }
+form.inline button { padding: 6px 14px; }
+.actions form.inline button { padding: 10px 20px; }
+.tag { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--ok-bg); border: 1px solid var(--ok-line); }
+details.add { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+details.add summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+nav.tabs a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; color: var(--text); }
+nav.tabs a[aria-current=page] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+pre.log.tall { max-height: 60vh; background: var(--bg); padding: 8px; border-radius: 6px; }

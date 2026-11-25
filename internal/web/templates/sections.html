@@ -25,6 +25,13 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 {{- else if eq .ID "updates"}}{{template "f-updates" .}}
 {{- else if eq .ID "ssh"}}{{template "f-ssh" .}}
 {{- else if eq .ID "rerun"}}{{template "f-rerun" .}}
+{{- else if eq .ID "wificountry"}}{{template "f-wificountry" .}}
+{{- else if eq .ID "wifistatus"}}{{template "p-wifistatus" .}}
+{{- else if eq .ID "wifinets"}}{{template "p-wifinets" .}}
+{{- else if eq .ID "sshkeys"}}{{template "p-sshkeys" .}}
+{{- else if eq .ID "os"}}{{template "p-os" .}}
+{{- else if eq .ID "sysinfo"}}{{template "p-sysinfo" .}}
+{{- else if eq .ID "logs"}}{{template "p-logs" .}}
 {{- end}}
 {{end}}
 
@@ -291,4 +298,182 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 
 {{define "f-rerun"}}
 	<p>Go through the setup steps again, starting from the hotspot's current settings. Nothing changes until you apply them at the end, and you can jump to any step.</p>
+{{end}}
+
+{{define "f-wificountry"}}
+	<label for="wifi_country">Country</label>
+	<select id="wifi_country" name="wifi_country">
+		{{$c := .Draft.WiFiCountry}}
+		{{range .Countries}}<option value="{{.Code}}" {{if eq .Code $c}}selected{{end}}>{{.Name}}</option>{{end}}
+	</select>
+	<p class="hint">Sets the WiFi channels and power allowed where you are.</p>
+	{{with index .Errors "wifi_country"}}<p class="error">{{.}}</p>{{end}}
+{{end}}
+
+{{/* Panels: admin-page sections that draw their own forms */}}
+
+{{define "panel-form"}}<form method="post" action="/admin/{{.P.AdminPage.ID}}/{{.P.ID}}" class="inline"{{with .Confirm}} data-confirm="{{.}}"{{end}}>
+	<input type="hidden" name="csrf" value="{{.P.CSRF}}">
+	<input type="hidden" name="action" value="{{.Action}}">
+	{{range $k, $v := .Fields}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
+	<button type="submit" class="{{or .Class "secondary"}}">{{.Label}}</button>
+</form>{{end}}
+
+{{define "p-wifistatus"}}
+	{{with .Panels.WiFi}}
+	{{if .Connected}}
+	<dl class="summary">
+		<dt>WiFi</dt><dd>{{.SSID}}</dd>
+		{{if .Signal}}<dt>Signal</dt><dd><span class="bars">{{signalBars .Signal}}</span> {{.Signal}} dBm{{with .FreqMHz}}, {{band .}}{{end}}</dd>{{end}}
+		{{with .Address}}<dt>Address</dt><dd>{{.}}</dd>{{end}}
+	</dl>
+	{{else}}
+	<p>Not connected to WiFi{{with .State}} ({{.}}){{end}}. If the hotspot has a cable, it uses that.</p>
+	{{end}}
+	{{end}}
+{{end}}
+
+{{define "p-wifinets"}}
+	{{$p := .}}
+	{{with index .Errors "saved"}}<p class="error">{{.}}</p>{{end}}
+	{{if .Panels.Saved}}
+	<ul class="list">
+	{{range .Panels.Saved}}
+		<li>
+			<span class="grow"><strong>{{.SSID}}</strong>{{if .Open}} <span class="hint">open</span>{{end}}{{if and $p.Panels.WiFi.Connected (eq .SSID $p.Panels.WiFi.SSID)}} <span class="tag">connected</span>{{end}}</span>
+			{{template "panel-form" (dict "P" $p "Action" "remove" "Label" "Remove" "Fields" (dict "ssid" .SSID) "Confirm" (printf "Remove %s?%s" .SSID (connectedNote $p.Panels.WiFi .SSID)))}}
+		</li>
+	{{end}}
+	</ul>
+	{{else}}
+	<p>No WiFi networks are saved. Without a cable, the hotspot starts its setup access point.</p>
+	{{end}}
+
+	<details class="add"{{if or (index .Errors "wifi_ssid") (index .Errors "wifi_password")}} open{{end}}>
+	<summary>Add a network</summary>
+	<form method="post" action="/admin/{{.AdminPage.ID}}/{{.ID}}">
+		<input type="hidden" name="csrf" value="{{.CSRF}}">
+		<input type="hidden" name="action" value="add">
+		<fieldset>
+			<legend>Network</legend>
+			<ul class="networks">
+			{{range .Networks}}
+				<li><label class="choice">
+					<input type="radio" name="wifi_ssid" value="{{.SSID}}">
+					<span class="ssid">{{.SSID}}</span>
+					<span class="meta"><span class="bars" title="{{.Signal}} dBm">{{signalBars .Signal}}</span> {{band .Frequency}}{{if not .Secured}} · open{{end}}</span>
+				</label></li>
+			{{end}}
+				<li><label class="choice">
+					<input type="radio" name="wifi_ssid" value="-other-" checked>
+					<span class="ssid">Other network…</span>
+				</label></li>
+			</ul>
+			<div class="other-ssid">
+				<label for="wifi_ssid_other">Network name, if not listed</label>
+				<input id="wifi_ssid_other" name="wifi_ssid_other" autocomplete="off" autocapitalize="none" spellcheck="false" value="{{.Panels.NewSSID}}">
+			</div>
+			{{with index .Errors "wifi_ssid"}}<p class="error">{{.}}</p>{{end}}
+		</fieldset>
+		<label for="wifi_password">Password</label>
+		<input id="wifi_password" name="wifi_password" type="password" autocomplete="off">
+		<p class="hint">Leave empty for an open network. Adding a network the hotspot already has replaces its password.</p>
+		{{with index .Errors "wifi_password"}}<p class="error">{{.}}</p>{{end}}
+		<div class="actions"><button type="submit">Add network</button></div>
+	</form>
+	</details>
+{{end}}
+
+{{define "p-sshkeys"}}
+	{{$p := .}}
+	{{with index .Errors "keys"}}<p class="error">{{.}}</p>{{end}}
+	{{if .Panels.Keys}}
+	<ul class="list">
+	{{range .Panels.Keys}}
+		<li>
+			<span class="grow"><strong>{{or .Comment "(no comment)"}}</strong><br>
+				<span class="ident">{{.Type}} {{.Fingerprint}}</span></span>
+			{{template "panel-form" (dict "P" $p "Action" "remove" "Label" "Remove" "Fields" (dict "key" .Key) "Confirm" (printf "Remove the key %s? That computer won't be able to log in with it." (or .Comment .Fingerprint)))}}
+		</li>
+	{{end}}
+	</ul>
+	{{else}}
+	<p>No SSH keys. Add one below, or allow password logins.</p>
+	{{end}}
+{{end}}
+
+{{define "p-os"}}
+	{{$p := .}}{{$os := .Panels.OS}}
+	{{with index .Errors "os"}}<p class="error">{{.}}</p>{{end}}
+	<dl class="summary">
+		<dt>Running</dt><dd>{{or $os.Running "unknown"}}{{with $os.ActiveSlot}} (slot {{.}}){{end}}</dd>
+		{{if $os.Pending}}<dt>Status</dt><dd>New: checking it starts properly (try {{$os.BootTries}})</dd>{{end}}
+		{{with $os.PreviousVersion}}<dt>Previous</dt><dd>{{.}} (slot {{$os.PreviousSlot}})</dd>{{end}}
+		{{with $os.LastUpdate}}{{with index . "RESULT"}}<dt>Last automatic check</dt><dd>{{updateResult .}}{{with index $os.LastUpdate "TIME"}}, {{.}}{{end}}</dd>{{end}}{{end}}
+	</dl>
+
+	{{$check := .Panels.Check}}{{$inst := .Panels.Install}}
+	{{if $inst.Running}}
+	<div class="notice" role="status"><p><strong>Installing the update…</strong> This takes a few minutes. The hotspot keeps working meanwhile.</p>
+		{{with $inst.Log}}<pre class="log">{{range .}}{{.}}
+{{end}}</pre>{{end}}</div>
+	{{else if eq $inst.State "ok"}}
+	<div class="notice ok" role="status"><p><strong>The update is installed.</strong> Restart to start it; if it doesn't start properly, the hotspot goes back to this version by itself.</p>
+		<div class="actions">{{template "panel-form" (dict "P" $p "Action" "reboot" "Label" "Restart now" "Class" "primary" "Confirm" "Restart the hotspot now? A QSO in progress is cut off.")}}</div></div>
+	{{else if eq $inst.State "failed"}}
+	<div class="notice warn" role="status"><p><strong>The update didn't install.</strong></p>
+		{{with $inst.Log}}<pre class="log">{{range .}}{{.}}
+{{end}}</pre>{{end}}</div>
+	{{else if $check.Running}}
+	<div class="notice" role="status"><p><strong>Checking for an update…</strong></p></div>
+	{{else if eq $check.State "failed"}}
+	<div class="notice warn" role="status"><p><strong>The check didn't work.</strong> Is the hotspot online?</p>
+		{{with $check.Log}}<pre class="log">{{range .}}{{.}}
+{{end}}</pre>{{end}}</div>
+	{{else if updateAvailable $check}}
+	<div class="notice ok" role="status"><p><strong>Update available: {{updateAvailable $check}}.</strong> It goes into the other slot; the hotspot keeps working until you restart.</p>
+		<div class="actions">{{template "panel-form" (dict "P" $p "Action" "install" "Label" "Install it" "Class" "primary" "Confirm" "Download and install the update now?")}}</div></div>
+	{{else if eq $check.State "ok"}}
+	<div class="notice ok" role="status"><p><strong>Up to date.</strong></p></div>
+	{{end}}
+
+	<div class="actions">
+		{{with $os.PreviousVersion}}{{template "panel-form" (dict "P" $p "Action" "rollback" "Label" (printf "Go back to %s" .) "Confirm" (printf "Go back to %s and restart? Settings stay as they are." .))}}{{end}}
+		{{if not (or $check.Running $inst.Running)}}{{template "panel-form" (dict "P" $p "Action" "check" "Label" "Check for an update" "Class" "primary")}}{{end}}
+	</div>
+{{end}}
+
+{{define "p-sysinfo"}}
+	{{$p := .}}{{$s := .Panels.Sys}}
+	{{with index .Errors "sysinfo"}}<p class="error">{{.}}</p>{{end}}
+	<dl class="summary">
+		{{with $s.Board}}<dt>Board</dt><dd>{{.}}</dd>{{end}}
+		{{with $s.Modem}}<dt>Radio</dt><dd>{{.}}{{with $s.ModemIdent}}<br><span class="ident">{{.}}</span>{{end}}</dd>{{end}}
+		<dt>System</dt><dd>m17-hotspot-os {{or $s.OSVersion "unknown"}}{{with $s.Kernel}}<br><span class="hint">Linux {{.}}</span>{{end}}</dd>
+		{{with $s.Hostname}}<dt>Name</dt><dd>{{.}}.local</dd>{{end}}
+		{{with $s.Addresses}}<dt>Addresses</dt><dd>{{range .}}{{.}}<br>{{end}}</dd>{{end}}
+		<dt>Up for</dt><dd>{{uptime $s.Uptime}}</dd>
+		{{if $s.HasTemp}}<dt>Temperature</dt><dd>{{printf "%.0f" $s.TempC}} °C</dd>{{end}}
+		{{with $s.MemTotal}}<dt>Memory</dt><dd>{{bytes $s.MemAvailable}} free of {{bytes .}}</dd>{{end}}
+		{{with $s.DiskTotal}}<dt>Storage</dt><dd>{{bytes $s.DiskFree}} free of {{bytes .}}</dd>{{end}}
+		{{with $s.Load}}<dt>Load</dt><dd>{{.}}</dd>{{end}}
+	</dl>
+	<div class="actions">
+		{{template "panel-form" (dict "P" $p "Action" "shutdown" "Label" "Shut down" "Confirm" "Shut the hotspot down? It stays off until its power is turned off and on again.")}}
+		{{template "panel-form" (dict "P" $p "Action" "reboot" "Label" "Restart" "Class" "primary" "Confirm" "Restart the hotspot? A QSO in progress is cut off.")}}
+	</div>
+{{end}}
+
+{{define "p-logs"}}
+	{{$cur := .Panels.LogName}}
+	<nav class="tabs" aria-label="Logs">
+		{{range .Panels.LogNames}}<a href="/admin/logs?log={{.}}"{{if eq . $cur}} aria-current="page"{{end}}>{{logTitle .}}</a>{{end}}
+	</nav>
+	<p class="hint">{{logHelp $cur}} The last 300 lines, newest at the bottom.</p>
+	{{if .Panels.LogLines}}
+	<pre class="log tall">{{range .Panels.LogLines}}{{.}}
+{{end}}</pre>
+	{{else}}
+	<p>Nothing logged yet.</p>
+	{{end}}
 {{end}}
