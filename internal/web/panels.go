@@ -80,6 +80,13 @@ func (s *Server) loadPanel(ctx context.Context, p *page, id string, q url.Values
 	case "sysinfo":
 		p.Panels.Sys, err = s.plat.SystemInfo(ctx)
 		return err
+	case "firmware":
+		if p.Firmware, err = s.adminFirmware(ctx, p.Draft); err != nil {
+			return err
+		}
+		if p.Firmware.Status.Running() {
+			p.Refresh = 3
+		}
 	case "logs":
 		p.Panels.LogNames = platform.LogNames
 		p.Panels.LogName = q.Get("log")
@@ -152,6 +159,33 @@ func (s *Server) submitPanel(w http.ResponseWriter, r *http.Request, sess *auth.
 		}
 		s.log.Info("WiFi network removed", "ssid", ssid)
 		saved("Removed "+ssid+".", reconnect)
+		return probs, true
+
+	case "firmware/detect":
+		hat, err := s.plat.DetectHAT(ctx)
+		if err != nil {
+			s.log.Warn("HAT detection failed", "err", err)
+		}
+		s.mu.Lock()
+		s.detected = &detection{HAT: hat, At: time.Now()}
+		s.mu.Unlock()
+		http.Redirect(w, r, "/admin/firmware", http.StatusSeeOther)
+		return probs, true
+
+	case "firmware/flash":
+		d, err := s.currentDraft(ctx)
+		if err != nil {
+			return fail("firmware", err)
+		}
+		fw, err := s.adminFirmware(ctx, d)
+		if err != nil {
+			return fail("firmware", err)
+		}
+		if msg := s.startFlash(ctx, fw, f.Get("firmware")); msg != "" {
+			probs.Errors["firmware"] = msg
+			return probs, false
+		}
+		http.Redirect(w, r, "/admin/firmware", http.StatusSeeOther)
 		return probs, true
 
 	case "sshkeys/remove":

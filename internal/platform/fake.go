@@ -169,6 +169,8 @@ func (f *Fake) finishFlash() {
 	if !f.flash.Running() || time.Now().Before(f.flashEnd) {
 		return
 	}
+	// m17os-firmware starts the gateway again, which reports the HAT
+	f.sys.gatewayStart = time.Now()
 	if f.FlashFails {
 		f.flash.State = "failed"
 		f.flash.Log = append(f.flash.Log, "Failed to init device.")

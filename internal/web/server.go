@@ -539,6 +539,9 @@ type page struct {
 	ID string
 	// Panels is what the admin pages' panels show
 	Panels panelData
+	// GatewayModem is what the gateway reported about the HAT when it
+	// started (the Radio page, when no detection has been done)
+	GatewayModem *platform.SystemInfo
 	// Message is the text of the message page; RefreshURL, if set, is
 	// where Refresh goes
 	Message    string

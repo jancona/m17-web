@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jancona/m17-web/internal/platform"
 )
@@ -299,5 +300,60 @@ func TestAdminOldSystem(t *testing.T) {
 		if code != 200 || !strings.Contains(body, "This system version can") {
 			t.Errorf("%s on an old system: %d", p, code)
 		}
+	}
+}
+
+// TestAdminFirmware: the Firmware page uses the gateway's report of the
+// HAT, flashes, and after the flash uses the gateway's new report.
+func TestAdminFirmware(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client) // MMDVM_HS_Dual_Hat with old firmware
+
+	_, _, body := h.get(h.client, "/admin/firmware")
+	if !strings.Contains(body, "MMDVM_HS_Dual_Hat-v1.5.2") || !strings.Contains(body, "the gateway") {
+		t.Fatalf("the gateway's report isn't used:\n%s", body)
+	}
+	if !strings.Contains(body, "Newer firmware is available") || !strings.Contains(body, `value="mmdvm_hs/MMDVM_HS_Dual_Hat.bin" checked`) {
+		t.Fatalf("the update isn't offered:\n%s", body)
+	}
+	// The Radio page shows the same report without probing
+	if _, _, body = h.get(h.client, "/admin/radio"); !strings.Contains(body, "The gateway found an MMDVM HAT") {
+		t.Errorf("the Radio page doesn't show the gateway's report")
+	}
+
+	code, _, body := h.postFrom(h.client, "/admin/firmware", "/admin/firmware/firmware", url.Values{"action": {"flash"}, "firmware": {"nope.bin"}})
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "isn&#39;t one of the firmware files") {
+		t.Errorf("unknown file: %d", code)
+	}
+	code, loc, _ := h.postFrom(h.client, "/admin/firmware", "/admin/firmware/firmware", url.Values{"action": {"flash"}, "firmware": {"mmdvm_hs/MMDVM_HS_Dual_Hat.bin"}})
+	h.expectRedirect(code, loc, "/admin/firmware")
+	_, _, body = h.get(h.client, "/admin/firmware")
+	if !strings.Contains(body, "Firmware written") || !strings.Contains(body, "newest firmware available here") {
+		t.Errorf("after flashing, the page doesn't show the new firmware:\n%s", body)
+	}
+}
+
+// TestAdminFirmwareFlashRunning: a flash in progress is shown, and the
+// page refreshes until it ends.
+func TestAdminFirmwareFlashRunning(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	h.fake.FlashTime = time.Hour // still running
+	h.postFrom(h.client, "/admin/firmware", "/admin/firmware/firmware", url.Values{"action": {"flash"}, "firmware": {"mmdvm_hs/MMDVM_HS_Dual_Hat.bin"}})
+	_, _, body := h.get(h.client, "/admin/firmware")
+	if !strings.Contains(body, "Flashing mmdvm_hs/MMDVM_HS_Dual_Hat.bin") || !strings.Contains(body, `http-equiv="refresh"`) {
+		t.Fatalf("a running flash isn't shown:\n%s", body)
+	}
+}
+
+// TestAdminFirmwareOtherHAT: when the gateway found another type of HAT
+// than the one configured, the Firmware page says so.
+func TestAdminFirmwareOtherHAT(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	h.postFrom(h.client, "/admin/radio", "/admin/radio/hat", url.Values{"hat_type": {"cc1200"}})
+	_, _, body := h.get(h.client, "/admin/firmware")
+	if !strings.Contains(body, "The gateway found an MMDVM HAT, but the hotspot is set up for a CC1200 HAT") {
+		t.Errorf("the mismatch isn't explained:\n%s", body)
 	}
 }
