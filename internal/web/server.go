@@ -683,6 +683,15 @@ func (s *Server) parseTemplates() error {
 			}
 			return d.String()
 		},
+		"mode":    entryMode,
+		"qrz":     qrzURL,
+		"isCall":  isCallsign,
+		"ago":     func(t time.Time) string { return ago(t, time.Now()) },
+		"rfc3339": func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
+		"since": func(t time.Time) string {
+			d := max(time.Since(t).Round(time.Second), 0)
+			return fmt.Sprintf("%d:%02d", int(d.Minutes()), int(d.Seconds())%60)
+		},
 		"coord": func(f float64) string { return strconv.FormatFloat(f, 'f', 5, 64) },
 		"altitude": func(m *float64) string {
 			if m == nil {

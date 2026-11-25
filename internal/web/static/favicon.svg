@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="48 60.5 172 172">
+<!-- The M17 Project logo, from M17-Project/LinHT-hw
+     present/template/imgs/m17-logo.svg, without its shadow, squared up
+     for a browser tab. The M is white on a dark tab bar. -->
+<style>.m{stroke:#000}@media (prefers-color-scheme:dark){.m{stroke:#fff}}</style>
+<g fill="none" stroke-width="10" stroke-linecap="butt" stroke-linejoin="miter">
+<path class="m" d="m 55.85933,177 34.641017,-60 v 60 l 34.641013,-60 v 60"/>
+<path stroke="#ff0000" d="m 159.78238,177 v -60 l -17.2733,29.91823"/>
+<path stroke="#ff0000" d="m 177.73423,177 34.64102,-60 h -33.97049"/>
+</g>
+</svg>

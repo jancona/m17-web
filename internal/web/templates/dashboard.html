@@ -1,24 +1,31 @@
 {{define "content"}}
-{{with .Dash.Station}}
-<p class="station">
-	<strong class="call">{{or .Callsign "No callsign set"}}</strong>
-	{{if .RXFrequency}}<span>{{if .Duplex}}RX {{mhz (hz .RXFrequency)}} · TX {{mhz (hz .TXFrequency)}} MHz{{else}}{{mhz (hz .RXFrequency)}} MHz{{end}}</span>{{end}}
-	{{with .HATType}}<span>{{hatName .}}</span>{{end}}
-</p>
-{{end}}
 {{$tab := .Dash.Tab}}
-<nav class="tabs" aria-label="Dashboard pages">
-	{{range .Dash.Tabs}}<a href="{{.Path}}"{{if eq .ID $tab}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
-</nav>
-{{if eq $tab "map"}}
-<div id="map" class="map" data-positions="/dashboard/positions.json" data-tiles="{{.Dash.Tiles}}" hidden></div>
-<noscript><p class="hint">The map needs JavaScript. The stations are listed below.</p></noscript>
-{{end}}
-<div id="live" data-live="{{.Dash.LivePath}}" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
-{{template "dash-live" .}}
+{{if eq $tab "status"}}
+<div class="dash">
+	<div id="live" class="dash-live" data-live="{{.Dash.LivePath}}" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
+	{{template "dash-live" .}}
+	</div>
+	<section class="card dash-map" aria-labelledby="map-h">
+		<div class="card-head"><h2 id="map-h">Map</h2><a href="/dashboard/map">Full map</a></div>
+		<div id="map" class="map mini" data-positions="/dashboard/positions.json" data-tiles="{{.Dash.Tiles}}" data-mini="1" hidden></div>
+		<noscript><p class="hint">The map needs JavaScript. <a href="/dashboard/map">The stations are listed here.</a></p></noscript>
+	</section>
 </div>
+{{else}}
+<p class="back"><a href="/dashboard/">← Dashboard</a></p>
+<section class="card">
+	<h1>{{.Title}}</h1>
+	{{if eq $tab "map"}}
+	<div id="map" class="map" data-positions="/dashboard/positions.json" data-tiles="{{.Dash.Tiles}}" hidden></div>
+	<noscript><p class="hint">The map needs JavaScript. The stations are listed below.</p></noscript>
+	{{end}}
+	<div id="live" data-live="{{.Dash.LivePath}}" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
+	{{template "dash-live" .}}
+	</div>
+</section>
+{{end}}
 <script src="/setup/static/dashboard.js" defer></script>
-{{if eq $tab "map"}}
+{{if .Dash.Tiles}}
 <script src="/setup/static/leaflet/leaflet.js" defer></script>
 <script src="/setup/static/map.js" defer></script>
 {{end}}
@@ -27,14 +34,128 @@
 {{/* The part the page's script replaces when something changes */}}
 {{define "dash-live"}}
 {{$d := .Dash}}
-{{if not $d.Live}}
+{{if eq $d.Tab "status"}}
+{{template "dash-status" $d}}
+{{else if not $d.Live}}
 <div class="notice"><p>Live status is off: the hotspot's web pages were started without an MQTT broker, so they can't hear from the gateway.</p></div>
 {{else if eq $d.Tab "messages"}}
 {{template "dash-messages" $d}}
 {{else if eq $d.Tab "map"}}
 {{template "dash-map" $d}}
+{{end}}
+{{end}}
+
+{{define "via"}}{{if eq . "rf"}}Radio{{else}}Reflector{{end}}{{end}}
+
+{{define "call"}}{{if isCall .}}<a href="{{qrz .}}" target="_blank" rel="noopener noreferrer">{{.}}</a>{{else}}{{.}}{{end}}{{end}}
+
+{{define "dash-status"}}
+{{$d := .}}
+<header class="dash-head">
+	{{with $d.Station}}
+	<div class="station">
+		<strong class="call">{{or .Callsign "No callsign set"}}</strong>
+		{{if .RXFrequency}}<span>{{if .Duplex}}RX {{mhz (hz .RXFrequency)}} · TX {{mhz (hz .TXFrequency)}} MHz{{else}}{{mhz (hz .RXFrequency)}} MHz{{end}}</span>{{end}}
+		{{with .HATType}}<span>{{hatName .}}</span>{{end}}
+	</div>
+	{{end}}
+	{{if $d.Live}}
+	{{with $d.Status}}
+	<ul class="chips" aria-label="Status">
+		<li class="{{if .Link.Linked}}ok{{else}}warn{{end}}">{{if .Link}}{{.Link.Describe}}{{else}}reflector not heard yet{{end}}</li>
+		<li class="{{if eq .ModemState "closed" "unknown"}}warn{{else}}ok{{end}}" title="{{.ModemState}}">radio {{if eq .ModemState "closed" "unknown"}}{{.ModemState}}{{else if $d.OnAir}}{{if eq (index $d.OnAir 0).Source "rf"}}receiving{{else}}transmitting{{end}}{{else}}idle{{end}}</li>
+		<li class="{{if .Heard.IsZero}}warn{{else}}ok{{end}}">gateway {{if .Heard.IsZero}}not heard from{{else}}{{or .Gateway "running"}}{{end}}</li>
+	</ul>
+	{{end}}
+	{{end}}
+</header>
+
+{{if not $d.Live}}
+<div class="dash-main"><div class="notice"><p>Live status is off: the hotspot's web pages were started without an MQTT broker, so they can't hear from the gateway.</p></div></div>
 {{else}}
-{{template "dash-status" $d}}
+<div class="dash-main">
+	{{if not $d.Status.Broker}}
+	<div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
+	{{else if $d.Status.Heard.IsZero}}
+	<p class="hint">If the gateway stays unheard, check that its settings have MQTT turned on ([MQTT] Enable=true) and that it's running.</p>
+	{{end}}
+
+	{{with $d.Caller}}
+	<section class="caller{{if .Active}} live{{end}}" role="status" aria-label="{{if .Active}}On air now{{else}}Last heard{{end}}">
+		<div class="who">
+			<span class="label">{{if .Active}}<span class="dot" aria-hidden="true"></span>On air now{{else}}Last heard{{end}}</span>
+			<span class="big">{{template "call" .Src}}</span>
+		</div>
+		<dl>
+			<div><dt>To</dt><dd>{{.Dst}}</dd></div>
+			<div><dt>Via</dt><dd>{{template "via" .Source}}</dd></div>
+			{{if eq .Kind "voice"}}
+			<div><dt>Length</dt><dd>{{if .Active}}<span data-since="{{rfc3339 .Time}}">{{since .Time}}</span>{{else}}{{seconds .Duration}}{{end}}</dd></div>
+			{{else}}
+			<div><dt>Mode</dt><dd>{{mode .}}</dd></div>
+			{{end}}
+			{{with .BER}}<div><dt>BER</dt><dd>{{pct .}}</dd></div>{{end}}
+			<div><dt>{{if .Active}}Started{{else}}When{{end}}</dt><dd>{{clock .Time}}{{if not .Active}} · <time datetime="{{rfc3339 .Time}}" data-ago>{{ago .Time}}</time>{{end}}</dd></div>
+		</dl>
+	</section>
+	{{end}}
+
+	<section class="card feed" aria-labelledby="feed-h">
+		<h2 id="feed-h" class="visually-hidden">Last heard</h2>
+		{{$p := $d.Prefs}}
+		<div class="feed-tools">
+			<nav class="filters" aria-label="Show">
+				<a href="{{$p.ShowLink "all"}}"{{if eq $p.Show "all"}} aria-current="page"{{end}}>All</a>
+				<a href="{{$p.ShowLink "rf"}}"{{if eq $p.Show "rf"}} aria-current="page"{{end}}>Radio</a>
+				<a href="{{$p.ShowLink "net"}}"{{if eq $p.Show "net"}} aria-current="page"{{end}}>Reflector</a>
+				<a href="{{$p.ShowLink "sms"}}"{{if eq $p.Show "sms"}} aria-current="page"{{end}}>Messages</a>
+			</nav>
+			<form class="toggles" method="get" action="/dashboard/">
+				<input type="hidden" name="f" value="1">
+				<input type="hidden" name="show" value="{{$p.Show}}">
+				<label><input type="checkbox" name="latest" value="1"{{if $p.Latest}} checked{{end}}> Latest per station</label>
+				<label><input type="checkbox" name="hide" value="1"{{if $p.HideKerchunks}} checked{{end}}> Hide kerchunks</label>
+				<noscript><button type="submit">Apply</button></noscript>
+			</form>
+		</div>
+		{{if $d.Entries}}
+		<div class="table-wrap">
+		<table class="feed-table">
+			<thead><tr><th>When</th><th>Callsign</th><th>To</th><th class="c-via">Via</th><th>Length</th><th class="c-ber">BER</th><th class="c-notes">Notes</th></tr></thead>
+			<tbody>
+			{{range $d.Entries}}
+			<tr{{if .Active}} class="active"{{end}}>
+				<td>{{clock .Time}} <time class="sub" datetime="{{rfc3339 .Time}}" data-ago>{{ago .Time}}</time></td>
+				<td><strong>{{template "call" .Src}}</strong><span class="sub ph">{{template "via" .Source}}</span></td>
+				<td>{{.Dst}}{{if .Text}}<span class="sub ph msg">{{.Text}}</span>{{end}}</td>
+				<td class="c-via"><span class="via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</span></td>
+				<td>{{if eq .Kind "voice"}}{{if .Active}}<span data-since="{{rfc3339 .Time}}">{{since .Time}}</span>{{else}}{{seconds .Duration}}{{end}}{{else}}{{mode .}}{{end}}{{with .BER}}<span class="sub ph">BER {{pct .}}</span>{{end}}</td>
+				<td class="c-ber">{{pct .BER}}</td>
+				<td class="c-notes">{{if .LateEntry}}late entry {{end}}{{if .Lost}}lost {{end}}{{with .Position}}<span title="{{coord .Latitude}}, {{coord .Longitude}}">position</span>{{end}}{{with .Text}}“{{.}}”{{end}}</td>
+			</tr>
+			{{end}}
+			</tbody>
+		</table>
+		</div>
+		{{else if $d.Caller}}
+		<p class="empty">Nothing to show with these choices.</p>
+		{{else}}
+		<p class="empty">Nothing heard yet.</p>
+		{{end}}
+	</section>
+</div>
+
+<section class="card dash-msgs" aria-labelledby="msgs-h">
+	<div class="card-head"><h2 id="msgs-h">Messages</h2><a href="/dashboard/messages">All messages</a></div>
+	{{range $d.Messages}}
+	<div class="msgline">
+		<div><strong>{{.Src}}</strong> → {{.Dst}} <span class="hint">{{clock .Time}}</span></div>
+		<div class="msgtext">{{.Text}}</div>
+	</div>
+	{{else}}
+	<p class="hint">No text messages heard yet.</p>
+	{{end}}
+</section>
 {{end}}
 {{end}}
 
@@ -43,22 +164,20 @@
 <div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
 {{end}}
 {{if .Messages}}
-<div class="table-wrap">
-<table class="activity messages">
-	<thead><tr><th>Time</th><th>From</th><th>To</th><th>Via</th><th>Message</th></tr></thead>
+<table class="feed-table messages">
+	<thead><tr><th>When</th><th>From</th><th>To</th><th class="c-via">Via</th><th class="c-notes">Message</th></tr></thead>
 	<tbody>
 	{{range .Messages}}
 	<tr>
-		<td data-label="Time">{{clock .Time}}</td>
-		<td data-label="From"><strong>{{.Src}}</strong></td>
-		<td data-label="To">{{.Dst}}</td>
-		<td data-label="Via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</td>
-		<td data-label="Message" class="msg">{{.Text}}</td>
+		<td>{{clock .Time}}</td>
+		<td><strong>{{template "call" .Src}}</strong><span class="sub ph">{{template "via" .Source}}</span></td>
+		<td>{{.Dst}}</td>
+		<td class="c-via"><span class="via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</span></td>
+		<td class="msg">{{.Text}}</td>
 	</tr>
 	{{end}}
 	</tbody>
 </table>
-</div>
 <p class="hint">The last {{len .Messages}} text message{{if ne (len .Messages) 1}}s{{end}} heard, newest first. The hotspot keeps up to 100.</p>
 {{else}}
 <p>No text messages heard yet.</p>
@@ -71,17 +190,17 @@
 {{end}}
 {{if .Positions}}
 <div class="table-wrap">
-<table class="activity positions">
+<table class="feed-table positions">
 	<thead><tr><th>Station</th><th>Heard</th><th>Position</th><th>Altitude</th><th>Moving</th><th>Via</th></tr></thead>
 	<tbody>
 	{{range .Positions}}
 	<tr>
-		<td data-label="Station"><strong>{{.Callsign}}</strong> <span class="hint">{{stationType .StationType}}</span></td>
-		<td data-label="Heard">{{clock .Time}}</td>
-		<td data-label="Position">{{coord .Latitude}}, {{coord .Longitude}}</td>
-		<td data-label="Altitude">{{altitude .Altitude}}</td>
-		<td data-label="Moving">{{speed .Speed .Bearing}}</td>
-		<td data-label="Via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</td>
+		<td><strong>{{template "call" .Callsign}}</strong> <span class="hint">{{stationType .StationType}}</span></td>
+		<td>{{clock .Time}}</td>
+		<td>{{coord .Latitude}}, {{coord .Longitude}}</td>
+		<td>{{altitude .Altitude}}</td>
+		<td>{{speed .Speed .Bearing}}</td>
+		<td>{{template "via" .Source}}</td>
 	</tr>
 	{{end}}
 	</tbody>
@@ -90,59 +209,5 @@
 <p class="hint">Stations that sent their position in the last 30 days, newest first.</p>
 {{else}}
 <p>No positions heard in the last 30 days. Stations send theirs when their radio has GPS turned on.</p>
-{{end}}
-{{end}}
-
-{{define "dash-status"}}
-{{$d := .}}
-{{with $d.Status}}
-<dl class="summary status">
-	<dt>Reflector</dt><dd>{{if .Link}}{{.Link.Describe}}{{else}}not heard yet{{end}}</dd>
-	<dt>Radio</dt><dd>{{.ModemState}}{{with .Mode}}{{if ne . "idle"}} · {{.}}{{end}}{{end}}</dd>
-	<dt>Gateway</dt><dd>{{if .Heard.IsZero}}not heard from yet{{else}}{{or .Gateway "running"}}{{end}}</dd>
-</dl>
-{{if not .Broker}}
-<div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
-{{else if .Heard.IsZero}}
-<p class="hint">If this stays so, check that the gateway's settings have MQTT turned on ([MQTT] Enable=true) and that it's running.</p>
-{{end}}
-{{end}}
-
-{{range $d.OnAir}}
-<div class="onair" role="status">
-	<span class="dot" aria-hidden="true"></span>
-	<strong>{{.Src}}</strong> → {{.Dst}}
-	<span class="hint">{{if eq .Source "rf"}}on the radio{{else}}from the reflector{{end}}, since {{clock .Time}}</span>
-</div>
-{{end}}
-
-<h2>Last heard</h2>
-{{if $d.Entries}}
-<div class="table-wrap">
-<table class="activity">
-	<thead><tr><th>Time</th><th>From</th><th>To</th><th>Via</th><th>Length</th><th>BER</th><th></th></tr></thead>
-	<tbody>
-	{{range $d.Entries}}
-	<tr{{if .Active}} class="active"{{end}}>
-		<td data-label="Time">{{clock .Time}}</td>
-		<td data-label="From"><strong>{{.Src}}</strong></td>
-		<td data-label="To">{{.Dst}}</td>
-		<td data-label="Via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</td>
-		{{if eq .Kind "voice"}}
-		<td data-label="Length">{{if .Active}}on air{{else}}{{seconds .Duration}}{{end}}</td>
-		<td data-label="BER">{{pct .BER}}</td>
-		<td data-label="">{{if .LateEntry}}late entry {{end}}{{if .Lost}}lost {{end}}{{with .Position}}<span title="{{.Latitude}}, {{.Longitude}}">📍</span>{{end}}</td>
-		{{else}}
-		<td data-label="Length">{{if .Text}}SMS{{else}}packet{{end}}</td>
-		<td data-label="BER">{{pct .BER}}</td>
-		<td data-label="">{{with .Text}}“{{.}}”{{else}}{{.Data}}{{end}}</td>
-		{{end}}
-	</tr>
-	{{end}}
-	</tbody>
-</table>
-</div>
-{{else}}
-<p>Nothing heard yet.</p>
 {{end}}
 {{end}}

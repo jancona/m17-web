@@ -7,10 +7,13 @@
 {{if and .Refresh .RefreshURL}}<meta http-equiv="refresh" content="{{.Refresh}};url={{.RefreshURL}}">{{else if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}
 {{with .NoScriptRefresh}}<noscript><meta http-equiv="refresh" content="{{.}}"></noscript>{{end}}
 {{range .Styles}}<link rel="stylesheet" href="{{.}}">
-{{end}}<link rel="stylesheet" href="/setup/static/style.css">
+{{end}}<link rel="icon" href="/setup/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/setup/static/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/setup/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/setup/static/style.css">
 <script src="/setup/static/app.js" defer></script>
 </head>
-<body{{if .Admin}} class="admin"{{end}}>
+<body{{if .Admin}} class="admin"{{else if .Dash}} class="dashboard"{{end}}>
 <div class="busybar" aria-hidden="true"></div>
 <header class="top">
 	<div class="brand">M17 hotspot <span>{{if .Admin}}admin{{else if .Public}}dashboard{{else}}setup{{end}}</span></div>
@@ -70,7 +73,7 @@
 
 <main>
 	{{if and .Step (ne .Step "done")}}<p class="stepno">Step {{stepIndex .Step}} of {{len .Steps}}{{if and .State .State.Rerun}} · setup again: choose any step above{{end}}</p>{{end}}
-	<h1>{{.Title}}</h1>
+	{{if not .Dash}}<h1>{{.Title}}</h1>{{end}}
 	{{template "content" .}}
 </main>
 {{end}}

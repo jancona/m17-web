@@ -70,9 +70,14 @@ func TestActivity(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("GET /dashboard/: %d", code)
 	}
-	for _, want := range []string{"can&#39;t link to M17-M17 C (rejected)", "N1ADJ", "AA5RL", "“hi”", "81DEAD",
-		"6.0 s", "1.5%", "late entry", "📍", "Not connected to the hotspot's MQTT broker",
-		`<noscript><meta http-equiv="refresh" content="15"></noscript>`, `data-events="/dashboard/events"`} {
+	for _, want := range []string{"can&#39;t link to M17-M17 C (rejected)", "N1ADJ", "AA5RL", "“hi”",
+		"6.0 s", "1.5%", "late entry", "position", "Not connected to the hotspot's MQTT broker",
+		`<noscript><meta http-equiv="refresh" content="15"></noscript>`, `data-events="/dashboard/events"`,
+		// The caller card: the last heard, a data packet
+		`aria-label="Last heard"`, "<dt>Mode</dt><dd>Data</dd>",
+		// Callsigns link to QRZ; ALL and reflectors don't
+		`<a href="https://www.qrz.com/db/N1ADJ" target="_blank" rel="noopener noreferrer">N1ADJ</a>`,
+		`data-live="/dashboard/live?f=1&amp;hide=1&amp;show=all"`, "Latest per station", `href="/dashboard/messages"`, `href="/dashboard/map"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard has no %q", want)
 		}
@@ -91,7 +96,7 @@ func TestActivity(t *testing.T) {
 		t.Fatalf("GET /dashboard/messages: %d", code)
 	}
 	for _, want := range []string{"<h1>Messages</h1>", ">hi<", "&lt;b&gt;73&lt;/b&gt;", "PARROT", `data-live="/dashboard/messages/live"`,
-		`<a href="/dashboard/messages" aria-current="page">`, "The last 2 text messages"} {
+		`<a href="/dashboard/">← Dashboard</a>`, "The last 2 text messages"} {
 		if !strings.Contains(msgs, want) {
 			t.Errorf("messages page has no %q", want)
 		}
@@ -125,11 +130,17 @@ func TestActivity(t *testing.T) {
 			t.Errorf("map page has no %q", want)
 		}
 	}
-	// Other pages keep the strict policy
+	// The status page has a small map; the messages page keeps the strict policy
 	if resp, err := http.Get(ts.URL + "/dashboard/"); err == nil {
 		resp.Body.Close()
+		if !strings.Contains(resp.Header.Get("Content-Security-Policy"), "openstreetmap") {
+			t.Error("the status page doesn't allow map tiles")
+		}
+	}
+	if resp, err := http.Get(ts.URL + "/dashboard/messages"); err == nil {
+		resp.Body.Close()
 		if strings.Contains(resp.Header.Get("Content-Security-Policy"), "openstreetmap") {
-			t.Error("the status page allows map tiles")
+			t.Error("the messages page allows map tiles")
 		}
 	}
 	code, pj := fetch(t, ts.URL+"/dashboard/positions.json")
