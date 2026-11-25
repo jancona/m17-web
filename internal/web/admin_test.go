@@ -391,3 +391,26 @@ func TestPackagesResult(t *testing.T) {
 		}
 	}
 }
+
+// TestRefreshWhileRunning: a page showing a running job reloads itself
+// with a URL of its own, so it reloads even when reached as
+// /admin/updates#os (a refresh to the same URL would only jump to the
+// fragment).
+func TestRefreshWhileRunning(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	h.fake.SetJob("os-check", platform.JobStatus{State: "running", Started: time.Now().Unix()})
+	_, _, body := h.get(h.client, "/admin/updates")
+	if !strings.Contains(body, `<meta http-equiv="refresh" content="3;url=/admin/updates">`) {
+		t.Errorf("no refresh with its own URL:\n%s", body[:min(len(body), 600)])
+	}
+	h.fake.SetJob("os-check", platform.JobStatus{})
+	h.fake.SetJob("packages", platform.JobStatus{State: "running", Started: time.Now().Unix()})
+	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, `content="3;url=/admin/updates"`) {
+		t.Error("Update now doesn't refresh")
+	}
+	h.fake.SetJob("packages", platform.JobStatus{})
+	if _, _, body = h.get(h.client, "/admin/updates"); strings.Contains(body, `http-equiv="refresh"`) {
+		t.Error("refreshes with nothing running")
+	}
+}

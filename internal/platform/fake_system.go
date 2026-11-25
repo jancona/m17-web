@@ -248,3 +248,11 @@ func (f *Fake) Counts() (reboots, shutdowns int) {
 	defer f.mu.Unlock()
 	return f.sys.Reboots, f.sys.Shutdowns
 }
+
+// SetJob sets the status of background job name, for tests (a running
+// job, say).
+func (f *Fake) SetJob(name string, j JobStatus) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sys.jobs[name] = j
+}
