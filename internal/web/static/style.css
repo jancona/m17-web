@@ -335,3 +335,11 @@ ul.chips li.warn::before { color: #b8860b; }
 	nav.filters a { padding: 6px 10px; font-size: 13px; }
 	ul.chips { font-size: 13px; }
 }
+
+/* Help */
+.help h2 { margin-top: 24px; scroll-margin-top: 12px; }
+.help nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; }
+dl.helplist { margin: 8px 0; }
+dl.helplist dt { font-weight: 600; margin-top: 12px; }
+dl.helplist dd { margin: 2px 0 0; max-width: 72ch; }
+.help p, .help ul { max-width: 72ch; }

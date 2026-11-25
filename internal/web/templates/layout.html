@@ -19,6 +19,7 @@
 	<div class="brand">M17 hotspot <span>{{if .Admin}}admin{{else if .Public}}dashboard{{else}}setup{{end}}</span></div>
 	<div class="toplinks">
 		{{if not .Public}}<a href="/">Dashboard</a>{{end}}
+		<a href="/dashboard/help">Help</a>
 		{{if and .LoggedIn (not .Admin)}}<a href="/admin/">Admin</a>{{else if .Public}}<a href="/admin/">Admin</a>{{end}}
 		{{if .LoggedIn}}
 		<form method="post" action="/setup/logout" class="logout">

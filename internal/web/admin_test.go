@@ -552,7 +552,7 @@ func TestFrontPage(t *testing.T) {
 	h.expectRedirect(code, loc, "/dashboard/")
 	for from, to := range map[string]string{
 		"/index.php": "/dashboard/", "/map.php": "/dashboard/map", "/messages.php": "/dashboard/messages",
-		"/config_gateway.php": "/admin/expert", "/config_dashboard.php": "/admin/system", "/login.php": "/setup/login",
+		"/config_gateway.php": "/admin/expert", "/help.php": "/dashboard/help", "/config_dashboard.php": "/admin/system", "/login.php": "/setup/login",
 	} {
 		code, loc, _ := h.get(h.client, from)
 		if code != http.StatusMovedPermanently || loc != to {

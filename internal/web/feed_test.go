@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jancona/m17-web/internal/activity"
+	"github.com/jancona/m17-web/internal/platform"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -181,5 +182,41 @@ func TestAgo(t *testing.T) {
 		if got := ago(now.Add(-d), now); got != want {
 			t.Errorf("ago(%v) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+func TestTxPower(t *testing.T) {
+	for _, c := range []struct {
+		cur  platform.Current
+		want string
+	}{
+		{platform.Current{HATType: "cc1200", Power: 10}, "10 dBm (10 mW)"},
+		{platform.Current{HATType: "cc1200", Power: 14}, "14 dBm (25 mW)"},
+		{platform.Current{HATType: "cc1200", Power: -16}, "-16 dBm (0.025 mW)"},
+		{platform.Current{HATType: "mmdvm", RFLevel: 40}, "power 40%"},
+		{platform.Current{HATType: "sx1255", Power: 10}, ""},
+		{platform.Current{}, ""},
+	} {
+		if got := txPower(c.cur); got != c.want {
+			t.Errorf("txPower(%+v) = %q, want %q", c.cur, got, c.want)
+		}
+	}
+}
+
+// TestHelpPage: the help page is public, linked from every page, and
+// rpi-dashboard's help.php leads to it.
+func TestHelpPage(t *testing.T) {
+	ts := activityServer(t, nil)
+	code, body := fetch(t, ts.URL+"/dashboard/help")
+	for _, want := range []string{"<h1>Help</h1>", `href="#questions"`, "dashboard_password=", "M17-Setup-", `href="/admin/station"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("help page has no %q", want)
+		}
+	}
+	if code != 200 || strings.Contains(body, `http-equiv="refresh"`) {
+		t.Errorf("help page: %d, or it refreshes itself", code)
+	}
+	if _, body := fetch(t, ts.URL+"/dashboard/"); !strings.Contains(body, `<a href="/dashboard/help">Help</a>`) {
+		t.Error("the dashboard doesn't link to help")
 	}
 }

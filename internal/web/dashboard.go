@@ -3,13 +3,29 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jancona/m17-web/internal/activity"
 	"github.com/jancona/m17-web/internal/platform"
 )
+
+// txPower describes the transmit power the gateway is set to: dBm (and mW)
+// for the CC1200 HAT, the RF level for MMDVM boards. "" for the SX1255
+// HAT, whose output is set by gains, and an unknown HAT.
+func txPower(c platform.Current) string {
+	switch c.HATType {
+	case "cc1200":
+		mw := math.Pow(10, float64(c.Power)/10)
+		return fmt.Sprintf("%d dBm (%s mW)", c.Power, strconv.FormatFloat(mw, 'g', 2, 64))
+	case "mmdvm":
+		return fmt.Sprintf("power %d%%", c.RFLevel)
+	}
+	return ""
+}
 
 // replacedPages are older pages' addresses, and where they are now: the
 // first activity page, and rpi-dashboard's (bookmarks keep working).
@@ -18,7 +34,7 @@ var replacedPages = map[string]string{
 	"/index.php":            "/dashboard/",
 	"/map.php":              "/dashboard/map",
 	"/messages.php":         "/dashboard/messages",
-	"/help.php":             "/dashboard/",
+	"/help.php":             "/dashboard/help",
 	"/config_gateway.php":   "/admin/expert",
 	"/config_dashboard.php": "/admin/system",
 	"/set_password.php":     "/admin/security",
@@ -64,6 +80,7 @@ var dashTabs = []dashTab{
 	{"status", "/dashboard/", "Dashboard"},
 	{"messages", "/dashboard/messages", "Messages"},
 	{"map", "/dashboard/map", "Map"},
+	{"help", "/dashboard/help", "Help"},
 }
 
 // mapMaxAge: the map shows stations heard from in this time.
@@ -94,6 +111,7 @@ func (s *Server) dashboardRoutes() {
 	s.mux.HandleFunc("GET /dashboard/map", s.dashboard("map"))
 	s.mux.HandleFunc("GET /dashboard/map/live", s.dashboardLive("map"))
 	s.mux.HandleFunc("GET /dashboard/positions.json", s.positionsJSON)
+	s.mux.HandleFunc("GET /dashboard/help", s.dashboard("help"))
 	s.mux.HandleFunc("GET /dashboard/events", s.dashboardEvents)
 	// The pages they replace: the activity page, and rpi-dashboard's
 	for from, to := range replacedPages {
@@ -119,7 +137,7 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*
 		}
 	}
 	d.LivePath = live
-	if tab != "messages" {
+	if tab == "status" || tab == "map" {
 		d.Tiles = mapTiles + "/{z}/{x}/{y}.png"
 	}
 	if tab == "status" {
@@ -152,7 +170,11 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*
 		m := s.activity.Messages()
 		d.Messages = m[:min(len(m), dashMessages)]
 	}
-	return &page{Title: title, Public: true, Dash: &d, LoggedIn: sess.LoggedIn, CSRF: sess.CSRF, NoScriptRefresh: 15}, nil
+	refresh := 15
+	if tab == "help" {
+		refresh = 0 // nothing live
+	}
+	return &page{Title: title, Public: true, Dash: &d, LoggedIn: sess.LoggedIn, CSRF: sess.CSRF, NoScriptRefresh: refresh}, nil
 }
 
 func (s *Server) dashboard(tab string) http.HandlerFunc {

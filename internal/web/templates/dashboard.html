@@ -11,6 +11,9 @@
 		<noscript><p class="hint">The map needs JavaScript. <a href="/dashboard/map">The stations are listed here.</a></p></noscript>
 	</section>
 </div>
+{{else if eq $tab "help"}}
+<p class="back"><a href="/dashboard/">← Dashboard</a></p>
+<section class="card help">{{template "dash-help" .}}</section>
 {{else}}
 <p class="back"><a href="/dashboard/">← Dashboard</a></p>
 <section class="card">
@@ -58,6 +61,7 @@
 		<strong class="call">{{or .Callsign "No callsign set"}}</strong>
 		{{if .RXFrequency}}<span>{{if .Duplex}}RX {{mhz (hz .RXFrequency)}} · TX {{mhz (hz .TXFrequency)}} MHz{{else}}{{mhz (hz .RXFrequency)}} MHz{{end}}</span>{{end}}
 		{{with .HATType}}<span>{{hatName .}}</span>{{end}}
+		{{with txPower .}}<span>{{.}}</span>{{end}}
 	</div>
 	{{end}}
 	{{if $d.Live}}
@@ -211,4 +215,68 @@
 {{else}}
 <p>No positions heard in the last 30 days. Stations send theirs when their radio has GPS turned on.</p>
 {{end}}
+{{end}}
+
+{{define "dash-help"}}
+<h1>Help</h1>
+<nav class="toc" aria-label="On this page">
+	<a href="#dashboard">The dashboard</a>
+	<a href="#admin">The admin pages</a>
+	<a href="#questions">Common questions</a>
+	<a href="#more">More help</a>
+</nav>
+
+<h2 id="dashboard">The dashboard</h2>
+<p>Anyone on your network can see the dashboard; only the admin pages need the password.</p>
+<dl class="helplist">
+	<dt>The card at the top</dt>
+	<dd>Who's on the air now, with a green border and the length counting up. When nobody is, it shows the last station heard and how long ago. Data shows its kind (SMS, APRS and so on) instead of a length.</dd>
+	<dt>Status</dt>
+	<dd>The reflector link, the radio, and the gateway (m17-gateway, the program that connects the radio to the reflector). The radio is <em>receiving</em> while a radio near the hotspot transmits to it, and <em>transmitting</em> while it sends traffic from the reflector, or its own replies such as an echo.</dd>
+	<dt>The list</dt>
+	<dd>Everything heard, newest first. <em>Radio</em> was heard on this hotspot's radio, with its BER (bit error rate; lower is better). <em>Network</em> came from the reflector, or is the hotspot's own reply. The buttons show only radio, network or message traffic. <em>Latest per station</em> keeps one line per station and mode; <em>Hide kerchunks</em> hides voice shorter than 1.5 seconds. This browser remembers your choices. Callsigns link to their QRZ page.</dd>
+	<dt>Messages</dt>
+	<dd>Text messages heard, newest first. The hotspot keeps the last 100.</dd>
+	<dt>Map</dt>
+	<dd>Where stations were when they last sent their position, over the last 30 days. Only radios with GPS turned on send one. The map itself comes from OpenStreetMap, so it needs the internet; the list of stations doesn't.</dd>
+</dl>
+
+<h2 id="admin">The admin pages</h2>
+<p><a href="/admin/">Admin</a> needs the admin password you chose during setup. A card at the top of each admin page says when something is wrong, and links to the page that helps.</p>
+<dl class="helplist">
+	<dt>Station</dt><dd>Your callsign, and the reflector and module the hotspot links to.</dd>
+	<dt>Radio</dt><dd>The radio HAT, its frequency and its power.</dd>
+	<dt>Firmware</dt><dd>The HAT's firmware: what it runs, and installing another version.</dd>
+	<dt>Expert</dt><dd>Every gateway setting, as text. The gateway checks the file before it's saved.</dd>
+	<dt>Network</dt><dd>WiFi networks, the WiFi country, and the hotspot's name.</dd>
+	<dt>Updates</dt><dd>Checking for and installing updates, and when they run by themselves.</dd>
+	<dt>Security</dt><dd>The admin password, SSH keys and SSH logins.</dd>
+	<dt>System</dt><dd>The hardware and how it's doing; starting, stopping and restarting the gateway; the time zone; restarting and shutting down.</dd>
+	<dt>Logs</dt><dd>What the hotspot, the gateway and these pages have recorded.</dd>
+</dl>
+
+<h2 id="questions">Common questions</h2>
+<dl class="helplist">
+	<dt>How do I change the reflector or module?</dt>
+	<dd>On the <a href="/admin/station">Station</a> admin page.</dd>
+	<dt>I forgot the admin password.</dt>
+	<dd>Shut the hotspot down and put its SD card in a computer. On the boot partition, create a file <code>m17-config.txt</code> containing <code>dashboard_password=</code> and a new password of at least 8 characters, then put the card back and start the hotspot. The file is deleted once it's been read.</dd>
+	<dt>The hotspot isn't on my WiFi.</dt>
+	<dd>When it can't join a network it starts its own, open WiFi network called <strong>M17-Setup-</strong> and four letters or digits. Join it with a phone or computer: the setup pages open by themselves, or open any <code>http://</code> address. Add your network there.</dd>
+	<dt>How does it update?</dt>
+	<dd>By itself, by default at 3 a.m. in the hotspot's time zone, waiting until nobody is on the air. You can check and update now, or change when they run, on the <a href="/admin/updates">Updates</a> page. A system update restarts the hotspot; if the new version doesn't start properly, it goes back to the one before by itself.</dd>
+	<dt>Why isn't a station on the map?</dt>
+	<dd>It hasn't sent its position: its radio needs GPS, turned on and with a fix.</dd>
+	<dt>How do I log in with SSH?</dt>
+	<dd>As the user <code>m17</code>: <code>ssh m17@{{or .Dash.Station.Hostname "m17-hotspot"}}.local</code>. The hotspot accepts SSH keys only, unless password logins are turned on (<a href="/admin/security">Security</a> page).</dd>
+	<dt>How do I turn it off?</dt>
+	<dd>Shut it down on the <a href="/admin/system">System</a> page and wait until its green light stops flashing before removing the power. Pulling the power while it's writing can damage the SD card.</dd>
+</dl>
+
+<h2 id="more">More help</h2>
+<ul>
+	<li><a href="https://m17project.org/" target="_blank" rel="noopener noreferrer">The M17 Project</a></li>
+	<li><a href="https://github.com/jancona/m17-hotspot-os" target="_blank" rel="noopener noreferrer">This hotspot's software</a>, where you can report a problem</li>
+	<li><a href="https://github.com/jancona/m17/blob/master/docs/m17-gateway-configuration.md" target="_blank" rel="noopener noreferrer">The gateway's settings</a>, for the Expert page</li>
+</ul>
 {{end}}
