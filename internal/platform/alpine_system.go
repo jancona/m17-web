@@ -70,7 +70,7 @@ func (a *Alpine) systemFiles() SystemFiles {
 // unsupported turns the helper's "unknown command" (an image from before
 // the command) into ErrUnsupported.
 func unsupported(err error) error {
-	if err != nil && strings.Contains(err.Error(), "unknown command") {
+	if err != nil && (strings.Contains(err.Error(), "unknown command") || strings.Contains(err.Error(), "unknown job")) {
 		return ErrUnsupported
 	}
 	return err

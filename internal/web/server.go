@@ -591,6 +591,10 @@ func (s *Server) parseTemplates() error {
 		},
 		"updateAvailable": updateAvailable,
 		"updateResult":    updateResult,
+		"packagesResult":  packagesResult,
+		"unixTime": func(t int64) string {
+			return time.Unix(t, 0).Local().Format("Jan 2 15:04")
+		},
 		"connectedNote": func(w platform.WiFiStatus, ssid string) string {
 			if w.Connected() && w.SSID == ssid {
 				return " The hotspot is connected to it now, so it will disconnect."

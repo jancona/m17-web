@@ -33,7 +33,8 @@ type System interface {
 
 	// OSStatus is the A/B slots and the last automatic update run.
 	OSStatus(ctx context.Context) (OSStatus, error)
-	// StartJob starts a background job: "os-check" or "os-install".
+	// StartJob starts a background job: "os-check", "os-install" or
+	// "packages" (update the M17 packages now).
 	StartJob(ctx context.Context, name string) error
 	// JobStatus reports the last run of job name (State "" if none).
 	JobStatus(ctx context.Context, name string) (JobStatus, error)

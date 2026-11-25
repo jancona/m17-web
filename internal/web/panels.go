@@ -23,6 +23,7 @@ type panelData struct {
 	OS       platform.OSStatus
 	Check    platform.JobStatus // the last update check
 	Install  platform.JobStatus // the last update install
+	Packages platform.JobStatus // the last "Update now" of the M17 packages
 	Sys      platform.SystemInfo
 	LogNames []string
 	LogName  string
@@ -80,6 +81,13 @@ func (s *Server) loadPanel(ctx context.Context, p *page, id string, q url.Values
 	case "sysinfo":
 		p.Panels.Sys, err = s.plat.SystemInfo(ctx)
 		return err
+	case "packages":
+		if p.Panels.Packages, err = s.plat.JobStatus(ctx, "packages"); err != nil {
+			return err
+		}
+		if p.Panels.Packages.Running() {
+			p.Refresh = 3
+		}
 	case "firmware":
 		if p.Firmware, err = s.adminFirmware(ctx, p.Draft); err != nil {
 			return err
@@ -205,6 +213,14 @@ func (s *Server) submitPanel(w http.ResponseWriter, r *http.Request, sess *auth.
 		http.Redirect(w, r, "/admin/updates#os", http.StatusSeeOther)
 		return probs, true
 
+	case "packages/update":
+		if err := s.plat.StartJob(ctx, "packages"); err != nil {
+			return fail("packages", err)
+		}
+		s.log.Info("job started", "job", "packages")
+		http.Redirect(w, r, "/admin/updates#packages", http.StatusSeeOther)
+		return probs, true
+
 	case "os/rollback":
 		if err := s.plat.Rollback(ctx); err != nil {
 			return fail("os", err)
@@ -304,4 +320,20 @@ var logHelps = map[string]string{
 	"gateway": "m17-gateway's log since it last started.",
 	"system":  "Everything the system logs, since the last restart.",
 	"web":     "These pages' own log since they last started.",
+}
+
+// packagesResult sums up an "Update now" of the M17 packages from its
+// output (m17os-autoupdate --packages).
+func packagesResult(j platform.JobStatus) string {
+	for _, l := range j.Log {
+		switch {
+		case strings.HasPrefix(l, "updated packages: "):
+			return "Updated: " + strings.TrimPrefix(l, "updated packages: ")
+		case strings.Contains(l, "up to date"):
+			return "The M17 software is up to date."
+		case strings.Contains(l, "gateway stayed busy"):
+			return "Not updated: the gateway stayed busy. Try again when nobody is transmitting."
+		}
+	}
+	return "Done."
 }

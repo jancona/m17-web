@@ -357,3 +357,37 @@ func TestAdminFirmwareOtherHAT(t *testing.T) {
 		t.Errorf("the mismatch isn't explained:\n%s", body)
 	}
 }
+
+// TestAdminUpdatePackages: Update now runs the packages job and shows
+// what it updated.
+func TestAdminUpdatePackages(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	_, _, body := h.get(h.client, "/admin/updates")
+	if !strings.Contains(body, "M17 software") || !strings.Contains(body, `name="action" value="update"`) {
+		t.Fatalf("no Update now:\n%s", body)
+	}
+	code, loc, _ := h.postFrom(h.client, "/admin/updates", "/admin/updates/packages", url.Values{"action": {"update"}})
+	h.expectRedirect(code, loc, "/admin/updates#packages")
+	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, "Updated: m17-gateway 0.9.10-r0") {
+		t.Errorf("the result isn't shown:\n%s", body)
+	}
+	// On an old image the job is unknown: the page says to update first
+	h.fake.SetUnsupported(true)
+	code, _, body = h.postFrom(h.client, "/admin/updates", "/admin/updates/packages", url.Values{"action": {"update"}})
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "update it first") {
+		t.Errorf("old image: %d", code)
+	}
+}
+
+func TestPackagesResult(t *testing.T) {
+	for log, want := range map[string]string{
+		"updated packages: m17-web 0_git2-r0":                    "Updated: m17-web 0_git2-r0",
+		"The M17 packages are up to date":                        "The M17 software is up to date.",
+		"package updates not installed: the gateway stayed busy": "Not updated: the gateway stayed busy. Try again when nobody is transmitting.",
+	} {
+		if got := packagesResult(platform.JobStatus{State: "ok", Log: []string{log}}); got != want {
+			t.Errorf("%q: %q, want %q", log, got, want)
+		}
+	}
+}
