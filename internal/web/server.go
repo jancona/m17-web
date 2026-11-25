@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jancona/m17-web/internal/activity"
 	"github.com/jancona/m17-web/internal/auth"
 	"github.com/jancona/m17-web/internal/firmware"
 	"github.com/jancona/m17-web/internal/platform"
@@ -38,6 +39,8 @@ type Server struct {
 	log      *slog.Logger
 	pages    map[string]*template.Template
 	mux      *http.ServeMux
+
+	activity *activity.Log // nil: no activity page
 
 	mu         sync.Mutex
 	lastResult *appliedResult    // what the last Apply did, for /setup/done
@@ -83,6 +86,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /setup/login", s.login)
 	s.mux.HandleFunc("POST /setup/logout", s.logout)
 	s.mux.HandleFunc("GET /setup/done", s.done)
+	s.mux.HandleFunc("GET /setup/activity", s.activityPage)
+	s.mux.HandleFunc("GET /setup/api/activity", s.activityJSON)
 	s.mux.HandleFunc("GET /setup/{step}", s.showStep)
 	s.mux.HandleFunc("POST /setup/{step}", s.submitStep)
 	s.adminRoutes()
@@ -548,6 +553,9 @@ type page struct {
 	RefreshURL string
 	// Refresh, if set, reloads the page after this many seconds
 	Refresh int
+
+	Status  *activity.Status
+	Entries []activity.Entry
 }
 
 func (s *Server) parseTemplates() error {
@@ -606,6 +614,32 @@ func (s *Server) parseTemplates() error {
 			default:
 				return "▂"
 			}
+		},
+		"clock": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			t = t.Local()
+			if y, m, d := time.Now().Date(); t.Year() == y && t.Month() == m && t.Day() == d {
+				return t.Format("15:04:05")
+			}
+			return t.Format("Jan 2 15:04")
+		},
+		"seconds": func(f *float64) string {
+			if f == nil {
+				return ""
+			}
+			d := time.Duration(*f * float64(time.Second)).Round(time.Second)
+			if d < time.Minute {
+				return fmt.Sprintf("%.1f s", *f)
+			}
+			return d.String()
+		},
+		"pct": func(f *float64) string {
+			if f == nil {
+				return ""
+			}
+			return fmt.Sprintf("%.1f%%", *f)
 		},
 		"band": func(mhz int) string {
 			if mhz >= 5000 {
