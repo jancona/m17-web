@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -361,6 +363,36 @@ func (a *Alpine) Log(ctx context.Context, name string) ([]string, error) {
 		return strings.Split(strings.TrimRight(out, "\n"), "\n"), nil
 	}
 	return nil, os.ErrNotExist
+}
+
+func (a *Alpine) Gateway(ctx context.Context) (GatewayState, error) {
+	// rc-service's status exits non-zero when the service isn't started,
+	// so its output counts, not its exit: " * status: started"
+	out, err := a.helper(ctx, "", "gateway", "status")
+	var st GatewayState
+	if _, after, ok := strings.Cut(out, "status:"); ok {
+		st.State = strings.TrimSpace(after)
+	} else if err != nil {
+		return st, err
+	}
+	st.Uptime, st.Running = processAge(filepath.Dir(a.systemFiles().Uptime), "m17-gateway")
+	_, lerr := os.Lstat(a.healthFiles().Runlevel)
+	st.AtBoot = lerr == nil
+	return st, nil
+}
+
+func (a *Alpine) ControlGateway(ctx context.Context, action string) error {
+	if !slices.Contains(GatewayActions, action) {
+		return fmt.Errorf("unknown gateway action %q", action)
+	}
+	_, err := a.helper(ctx, "", "gateway", action)
+	if action == "restart" && err != nil && strings.Contains(err.Error(), "usage:") {
+		// An admin helper without restart
+		if _, err = a.helper(ctx, "", "gateway", "stop"); err == nil {
+			_, err = a.helper(ctx, "", "gateway", "start")
+		}
+	}
+	return err
 }
 
 func (a *Alpine) Reboot(ctx context.Context) error {

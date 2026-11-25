@@ -64,6 +64,7 @@ var adminPages = []adminPage{
 	}},
 	{ID: "system", Title: "System", Group: "Administration", Sections: []adminSection{
 		{ID: "sysinfo", Title: "This hotspot", Panel: true},
+		{ID: "gateway", Title: "Gateway", Panel: true, Help: "m17-gateway connects the radio to the reflector."},
 		{ID: "timezone", Title: "Time zone"},
 		{ID: "rerun", Title: "Run setup again", Button: "Run setup again"},
 	}},

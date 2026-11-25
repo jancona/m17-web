@@ -31,6 +31,7 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 {{- else if eq .ID "sshkeys"}}{{template "p-sshkeys" .}}
 {{- else if eq .ID "os"}}{{template "p-os" .}}
 {{- else if eq .ID "sysinfo"}}{{template "p-sysinfo" .}}
+{{- else if eq .ID "gateway"}}{{template "p-gateway" .}}
 {{- else if eq .ID "logs"}}{{template "p-logs" .}}
 {{- else if eq .ID "firmware"}}{{template "p-firmware" .}}
 {{- end}}
@@ -484,6 +485,29 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 		{{template "panel-form" (dict "P" $p "Action" "shutdown" "Label" "Shut down" "Confirm" "Shut the hotspot down? It stays off until its power is turned off and on again.")}}
 		{{template "panel-form" (dict "P" $p "Action" "reboot" "Label" "Restart" "Class" "primary" "Confirm" "Restart the hotspot? A QSO in progress is cut off.")}}
 	</div>
+{{end}}
+
+{{define "p-gateway"}}
+	{{$p := .}}{{$g := .Panels.Gateway}}
+	{{with index .Errors "gateway"}}<p class="error">{{.}}</p>{{end}}
+	{{if index .Panels.Unsupported "gateway"}}
+	<p class="hint">This system version can't show the gateway's state here; update it first.</p>
+	{{else}}
+	<dl class="summary">
+		<dt>State</dt><dd>{{if $g.Running}}running for {{uptime $g.Uptime}}{{else if eq $g.State "crashed"}}<strong>stopped unexpectedly</strong>{{else if eq $g.State "starting"}}starting{{else}}<strong>stopped</strong>{{end}}</dd>
+		<dt>At startup</dt><dd>{{if $g.AtBoot}}starts with the hotspot{{else}}doesn't start with the hotspot{{end}}</dd>
+	</dl>
+	{{if not $g.Running}}<p class="hint">The hotspot is off the air while the gateway is stopped.{{if $g.AtBoot}} Restarting the hotspot also starts it.{{end}}</p>{{end}}
+	<div class="actions">
+		<a href="/admin/logs?log=gateway" class="button secondary">Gateway log</a>
+		{{if $g.Running}}
+		{{template "panel-form" (dict "P" $p "Action" "stop" "Label" "Stop" "Confirm" "Stop the gateway? The hotspot goes off the air until you start it again or restart the hotspot.")}}
+		{{template "panel-form" (dict "P" $p "Action" "restart" "Label" "Restart" "Class" "primary" "Confirm" "Restart the gateway? A QSO in progress is cut off.")}}
+		{{else}}
+		{{template "panel-form" (dict "P" $p "Action" "start" "Label" "Start" "Class" "primary")}}
+		{{end}}
+	</div>
+	{{end}}
 {{end}}
 
 {{define "p-logs"}}
