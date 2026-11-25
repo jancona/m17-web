@@ -21,6 +21,8 @@ type fakeSystem struct {
 	Reboots, Shutdowns int
 	// Unsupported makes every System method fail as on an old image.
 	Unsupported bool
+	// health is what Health returns
+	health []Problem
 }
 
 func newFakeSystem() fakeSystem {
@@ -255,4 +257,17 @@ func (f *Fake) SetJob(name string, j JobStatus) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sys.jobs[name] = j
+}
+
+func (f *Fake) Health(ctx context.Context) ([]Problem, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.sys.health), nil
+}
+
+// SetHealth sets what Health reports.
+func (f *Fake) SetHealth(ps ...Problem) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sys.health = ps
 }

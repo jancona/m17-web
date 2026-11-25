@@ -414,3 +414,24 @@ func TestRefreshWhileRunning(t *testing.T) {
 		t.Error("refreshes with nothing running")
 	}
 }
+
+// TestHealthCards: problems show on every admin page, with the page that
+// helps; with none, nothing is shown.
+func TestHealthCards(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	if _, _, body := h.get(h.client, "/admin/station"); strings.Contains(body, `class="health"`) {
+		t.Error("cards shown with nothing wrong")
+	}
+	h.fake.SetHealth(platform.Problem{Level: "error", Title: "The gateway keeps restarting: it started 4 times in the last 10 minutes.",
+		Detail: "Error creating MMDVM modem: modem returned NAK", Page: "logs"})
+	h.srv.mu.Lock()
+	h.srv.healthAt = time.Time{} // expire the cache
+	h.srv.mu.Unlock()
+	for _, p := range []string{"/admin/station", "/admin/system"} {
+		_, _, body := h.get(h.client, p)
+		if !strings.Contains(body, "keeps restarting") || !strings.Contains(body, "modem returned NAK") || !strings.Contains(body, `<a href="/admin/logs">Logs →</a>`) {
+			t.Errorf("%s: no health card:\n%s", p, body)
+		}
+	}
+}

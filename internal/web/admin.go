@@ -178,6 +178,7 @@ func (s *Server) newAdminPage(ctx context.Context, sess *auth.Session, ap adminP
 		Warnings:    map[string]string{},
 	}
 	p.Panels.Unsupported = map[string]bool{}
+	p.Health = s.healthNow(ctx)
 	for _, sec := range ap.Sections {
 		var err error
 		if sec.Panel {
@@ -378,4 +379,27 @@ func withSection(p *page, id string) *page {
 	c := *p
 	c.ID = id
 	return &c
+}
+
+// healthCache is how long a health check's result is reused: moving
+// between admin pages doesn't run it each time.
+const healthCache = 10 * time.Second
+
+// healthNow is what's wrong with the hotspot, from a recent check.
+func (s *Server) healthNow(ctx context.Context) []platform.Problem {
+	s.mu.Lock()
+	if time.Since(s.healthAt) < healthCache {
+		h := s.health
+		s.mu.Unlock()
+		return h
+	}
+	s.mu.Unlock()
+	h, err := s.plat.Health(ctx)
+	if err != nil {
+		s.log.Warn("health check", "err", err)
+	}
+	s.mu.Lock()
+	s.health, s.healthAt = h, time.Now()
+	s.mu.Unlock()
+	return h
 }

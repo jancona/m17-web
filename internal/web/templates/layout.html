@@ -37,6 +37,16 @@
 </nav>
 <main>
 	<h1>{{.Title}}</h1>
+	{{if .Health}}
+	<div class="health" role="status">
+	{{range .Health}}
+		<div class="hcard {{.Level}}">
+			<p><strong>{{.Title}}</strong>{{with .Page}} <a href="/admin/{{.}}">{{pageTitle .}} →</a>{{end}}</p>
+			{{with .Detail}}<p class="ident">{{.}}</p>{{end}}
+		</div>
+	{{end}}
+	</div>
+	{{end}}
 	{{template "content" .}}
 </main>
 </div>

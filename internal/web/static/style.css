@@ -237,3 +237,12 @@ table.activity { border-collapse: collapse; width: 100%; font-size: 14px; }
 table.activity th, table.activity td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.activity td:last-child { white-space: normal; word-break: break-word; }
 table.activity tr.active td { background: var(--ok-bg); font-weight: 600; }
+
+/* Health cards: what's wrong, at the top of every admin page */
+.health { margin: 0 0 16px; }
+.hcard { border: 1px solid var(--line); border-left-width: 5px; border-radius: 8px; padding: 6px 12px; margin: 0 0 8px; background: var(--card); }
+.hcard p { margin: 4px 0; }
+.hcard.error { border-color: var(--error); }
+.hcard.warn { border-color: var(--warn-line); background: var(--warn-bg); }
+.hcard.info { border-color: var(--accent); }
+.hcard a { white-space: nowrap; }

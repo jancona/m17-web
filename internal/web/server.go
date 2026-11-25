@@ -46,6 +46,8 @@ type Server struct {
 	lastResult *appliedResult    // what the last Apply did, for /setup/done
 	notices    map[string]notice // per session: what the last admin Save did
 	detected   *detection        // the last HAT detection from the Radio page
+	health     []platform.Problem
+	healthAt   time.Time
 }
 
 // appliedResult is what applying the wizard's settings did.
@@ -544,6 +546,8 @@ type page struct {
 	ID string
 	// Panels is what the admin pages' panels show
 	Panels panelData
+	// Health is what's wrong, shown as cards on the admin pages
+	Health []platform.Problem
 	// GatewayModem is what the gateway reported about the HAT when it
 	// started (the Radio page, when no detection has been done)
 	GatewayModem *platform.SystemInfo
@@ -582,6 +586,12 @@ func (s *Server) parseTemplates() error {
 		},
 		"familyTitle": firmware.FamilyTitle,
 		"withSection": withSection,
+		"pageTitle": func(id string) string {
+			if p, ok := findAdminPage(id); ok {
+				return p.Title
+			}
+			return id
+		},
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(kv); i += 2 {

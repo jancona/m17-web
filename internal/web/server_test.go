@@ -23,6 +23,7 @@ type harness struct {
 	t      *testing.T
 	ts     *httptest.Server
 	fake   *platform.Fake
+	srv    *Server
 	dir    string
 	client *http.Client
 }
@@ -38,7 +39,7 @@ func newHarness(t *testing.T) *harness {
 	srv.Sessions().Sleep = func(time.Duration) {}
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
-	h := &harness{t: t, ts: ts, fake: fake, dir: dir}
+	h := &harness{t: t, ts: ts, fake: fake, srv: srv, dir: dir}
 	h.client = h.newClient()
 	return h
 }
