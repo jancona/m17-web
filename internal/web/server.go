@@ -676,6 +676,14 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name
 		s.fail(w, r, fmt.Errorf("no template %q", name))
 		return
 	}
+	// A page that refreshes itself names the URL to load: a refresh to its
+	// own URL is only a jump within the page when it was reached with a
+	// fragment (the admin pages redirect to /admin/updates#os), so it
+	// wouldn't reload. The browser never sends the fragment, so this URL
+	// has none.
+	if p.Refresh > 0 && p.RefreshURL == "" && r.Method == http.MethodGet {
+		p.RefreshURL = r.URL.RequestURI()
+	}
 	var b strings.Builder
 	if err := t.Execute(&b, p); err != nil {
 		s.fail(w, r, err)
