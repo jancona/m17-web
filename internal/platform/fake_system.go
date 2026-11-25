@@ -162,6 +162,8 @@ func (f *Fake) StartJob(ctx context.Context, name string) error {
 	case "os-install":
 		f.sys.jobs[name] = JobStatus{State: "ok", Exit: 0, Started: now, Log: []string{"Downloading m17-hotspot-os-2026.11.25.1.rootfs.tar.xz...", "Update 2026.11.25.1 installed to slot B.", "Reboot to activate it."}}
 		f.sys.os.SlotB = "2026.11.25.1"
+	case "packages":
+		f.sys.jobs[name] = JobStatus{State: "ok", Exit: 0, Started: now, Log: []string{"updated packages: m17-gateway 0.9.10-r0, m17-gateway-openrc 0.9.10-r0", "Restarted m17-gateway"}}
 	default:
 		return fmt.Errorf("admin helper job-start: unknown job: %s", name)
 	}

@@ -33,6 +33,7 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 {{- else if eq .ID "sysinfo"}}{{template "p-sysinfo" .}}
 {{- else if eq .ID "logs"}}{{template "p-logs" .}}
 {{- else if eq .ID "firmware"}}{{template "p-firmware" .}}
+{{- else if eq .ID "packages"}}{{template "p-packages" .}}
 {{- end}}
 {{end}}
 
@@ -598,4 +599,26 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 	{{end}}
 </form>
 {{end}}
+{{end}}
+
+{{define "p-packages"}}
+	{{$p := .}}{{$j := .Panels.Packages}}
+	{{with index .Errors "packages"}}<p class="error">{{.}}</p>{{end}}
+	{{if $j.Running}}
+	<div class="notice" role="status"><p><strong>Updating…</strong> It waits for the gateway to be idle, then installs what's new and restarts what changed. This page updates by itself.</p>
+		{{with $j.Log}}<pre class="log">{{range .}}{{.}}
+{{end}}</pre>{{end}}</div>
+	{{else if eq $j.State "ok"}}
+	<div class="notice ok" role="status"><p><strong>{{packagesResult $j}}</strong>{{with $j.Started}} <span class="hint">({{unixTime .}})</span>{{end}}</p>
+		{{with $j.Log}}<details><summary>Details</summary><pre class="log">{{range .}}{{.}}
+{{end}}</pre></details>{{end}}</div>
+	{{else if eq $j.State "failed"}}
+	<div class="notice warn" role="status"><p><strong>The update didn't work.</strong> Is the hotspot online?</p>
+		{{with $j.Log}}<pre class="log">{{range .}}{{.}}
+{{end}}</pre>{{end}}</div>
+	{{end}}
+	{{with .Panels.OS.LastUpdate}}{{with index . "PACKAGES_UPDATED"}}<p class="hint">Last updated automatically: {{.}}</p>{{end}}{{end}}
+	{{if not $j.Running}}
+	<div class="actions">{{template "panel-form" (dict "P" $p "Action" "update" "Label" "Update now" "Class" "primary")}}</div>
+	{{end}}
 {{end}}
