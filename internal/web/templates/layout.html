@@ -6,7 +6,8 @@
 <title>{{.Title}} · M17 hotspot</title>
 {{if and .Refresh .RefreshURL}}<meta http-equiv="refresh" content="{{.Refresh}};url={{.RefreshURL}}">{{else if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}
 {{with .NoScriptRefresh}}<noscript><meta http-equiv="refresh" content="{{.}}"></noscript>{{end}}
-<link rel="stylesheet" href="/setup/static/style.css">
+{{range .Styles}}<link rel="stylesheet" href="{{.}}">
+{{end}}<link rel="stylesheet" href="/setup/static/style.css">
 <script src="/setup/static/app.js" defer></script>
 </head>
 <body{{if .Admin}} class="admin"{{end}}>

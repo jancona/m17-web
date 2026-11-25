@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,10 +13,12 @@ import (
 
 // dashData is what the dashboard shows.
 type dashData struct {
-	// Tab is the dashboard page: "status" or "messages"
-	Tab     string
-	Tabs    []dashTab
-	Station platform.Current
+	// Tab is the dashboard page: "status", "messages" or "map"
+	Tab  string
+	Tabs []dashTab
+	// LivePath is where the page's script fetches its live part
+	LivePath string
+	Station  platform.Current
 	// Live is false when m17-web runs without an MQTT broker
 	Live    bool
 	Status  activity.Status
@@ -23,16 +26,33 @@ type dashData struct {
 	Entries []activity.Entry // last heard, newest first
 	// Messages are the text messages, newest first (messages tab)
 	Messages []activity.Entry
+	// Positions are the stations' last positions, newest first (map tab)
+	Positions []activity.StationPosition
+	// Tiles is the map's tile URL template (map tab)
+	Tiles string
 }
 
 // dashTab is one of the dashboard's pages.
 type dashTab struct{ ID, Path, Title string }
 
+// LivePath is where the page's script fetches its live part.
+func (t dashTab) LivePath() string {
+	return strings.TrimSuffix(t.Path, "/") + "/live"
+}
+
 // dashTabs are the dashboard's pages.
 var dashTabs = []dashTab{
 	{"status", "/dashboard/", "Dashboard"},
 	{"messages", "/dashboard/messages", "Messages"},
+	{"map", "/dashboard/map", "Map"},
 }
+
+// mapMaxAge: the map shows stations heard from in this time.
+const mapMaxAge = 30 * 24 * time.Hour
+
+// mapTiles is where the map's tiles come from, the one thing the dashboard
+// loads from outside the hotspot.
+const mapTiles = "https://tile.openstreetmap.org"
 
 // dashEntries is how many last-heard entries the dashboard shows.
 const dashEntries = 50
@@ -49,6 +69,9 @@ func (s *Server) dashboardRoutes() {
 	s.mux.HandleFunc("GET /dashboard/live", s.dashboardLive("status"))
 	s.mux.HandleFunc("GET /dashboard/messages", s.dashboard("messages"))
 	s.mux.HandleFunc("GET /dashboard/messages/live", s.dashboardLive("messages"))
+	s.mux.HandleFunc("GET /dashboard/map", s.dashboard("map"))
+	s.mux.HandleFunc("GET /dashboard/map/live", s.dashboardLive("map"))
+	s.mux.HandleFunc("GET /dashboard/positions.json", s.positionsJSON)
 	s.mux.HandleFunc("GET /dashboard/events", s.dashboardEvents)
 	// The activity page it replaces
 	s.mux.HandleFunc("GET /setup/activity", func(w http.ResponseWriter, r *http.Request) {
@@ -65,17 +88,24 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*
 		return nil, err
 	}
 	d := dashData{Tab: tab, Tabs: dashTabs, Station: cur, Live: s.activity != nil}
-	title := "Dashboard"
+	title, live := "Dashboard", "/dashboard/live"
 	for _, t := range dashTabs {
 		if t.ID == tab {
-			title = t.Title
+			title, live = t.Title, t.LivePath()
 		}
+	}
+	d.LivePath = live
+	if tab == "map" {
+		d.Tiles = mapTiles + "/{z}/{x}/{y}.png"
 	}
 	switch {
 	case s.activity == nil:
 	case tab == "messages":
 		d.Status, _ = s.activity.Snapshot()
 		d.Messages = s.activity.Messages()
+	case tab == "map":
+		d.Status, _ = s.activity.Snapshot()
+		d.Positions = s.activity.Positions(time.Now().Add(-mapMaxAge))
 	default:
 		var entries []activity.Entry
 		d.Status, entries = s.activity.Snapshot()
@@ -96,8 +126,23 @@ func (s *Server) dashboard(tab string) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
+		if tab == "map" {
+			// The map's tiles
+			w.Header().Set("Content-Security-Policy", strings.Replace(csp, "img-src 'self' data:", "img-src 'self' data: "+mapTiles, 1))
+			p.Styles = []string{"/setup/static/leaflet/leaflet.css"}
+		}
 		s.render(w, r, http.StatusOK, "dashboard", p)
 	}
+}
+
+// positionsJSON is the stations' last positions, for the map's script.
+func (s *Server) positionsJSON(w http.ResponseWriter, r *http.Request) {
+	ps := []activity.StationPosition{}
+	if s.activity != nil {
+		ps = append(ps, s.activity.Positions(time.Now().Add(-mapMaxAge))...)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(ps)
 }
 
 // dashboardLive is the live part of the dashboard alone, which the page's

@@ -10,10 +10,18 @@
 <nav class="tabs" aria-label="Dashboard pages">
 	{{range .Dash.Tabs}}<a href="{{.Path}}"{{if eq .ID $tab}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
 </nav>
-<div id="live" data-live="{{if eq $tab "messages"}}/dashboard/messages/live{{else}}/dashboard/live{{end}}" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
+{{if eq $tab "map"}}
+<div id="map" class="map" data-positions="/dashboard/positions.json" data-tiles="{{.Dash.Tiles}}" hidden></div>
+<noscript><p class="hint">The map needs JavaScript. The stations are listed below.</p></noscript>
+{{end}}
+<div id="live" data-live="{{.Dash.LivePath}}" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
 {{template "dash-live" .}}
 </div>
 <script src="/setup/static/dashboard.js" defer></script>
+{{if eq $tab "map"}}
+<script src="/setup/static/leaflet/leaflet.js" defer></script>
+<script src="/setup/static/map.js" defer></script>
+{{end}}
 {{end}}
 
 {{/* The part the page's script replaces when something changes */}}
@@ -23,6 +31,8 @@
 <div class="notice"><p>Live status is off: the hotspot's web pages were started without an MQTT broker, so they can't hear from the gateway.</p></div>
 {{else if eq $d.Tab "messages"}}
 {{template "dash-messages" $d}}
+{{else if eq $d.Tab "map"}}
+{{template "dash-map" $d}}
 {{else}}
 {{template "dash-status" $d}}
 {{end}}
@@ -52,6 +62,34 @@
 <p class="hint">The last {{len .Messages}} text message{{if ne (len .Messages) 1}}s{{end}} heard, newest first. The hotspot keeps up to 100.</p>
 {{else}}
 <p>No text messages heard yet.</p>
+{{end}}
+{{end}}
+
+{{define "dash-map"}}
+{{if not .Status.Broker}}
+<div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
+{{end}}
+{{if .Positions}}
+<div class="table-wrap">
+<table class="activity positions">
+	<thead><tr><th>Station</th><th>Heard</th><th>Position</th><th>Altitude</th><th>Moving</th><th>Via</th></tr></thead>
+	<tbody>
+	{{range .Positions}}
+	<tr>
+		<td data-label="Station"><strong>{{.Callsign}}</strong> <span class="hint">{{stationType .StationType}}</span></td>
+		<td data-label="Heard">{{clock .Time}}</td>
+		<td data-label="Position">{{coord .Latitude}}, {{coord .Longitude}}</td>
+		<td data-label="Altitude">{{altitude .Altitude}}</td>
+		<td data-label="Moving">{{speed .Speed .Bearing}}</td>
+		<td data-label="Via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</td>
+	</tr>
+	{{end}}
+	</tbody>
+</table>
+</div>
+<p class="hint">Stations that sent their position in the last 30 days, newest first.</p>
+{{else}}
+<p>No positions heard in the last 30 days. Stations send theirs when their radio has GPS turned on.</p>
 {{end}}
 {{end}}
 

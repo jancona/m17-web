@@ -13,7 +13,11 @@
 		fetching = true;
 		fetch(live.dataset.live, { cache: "no-store" })
 			.then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
-			.then(function (html) { live.innerHTML = html; })
+			.then(function (html) {
+				live.innerHTML = html;
+				// For the map, which fetches its positions again
+				document.dispatchEvent(new Event("dashboard:update"));
+			})
 			.catch(function () { /* the next event tries again */ })
 			.then(function () {
 				fetching = false;
