@@ -7,7 +7,8 @@
 	if (!el || !window.L || !el.dataset.tiles) return;
 	el.hidden = false;
 
-	var map = L.map(el, { worldCopyJump: true }).setView([20, 0], 2);
+	// The status page's small map doesn't take the page's scrolling
+	var map = L.map(el, { worldCopyJump: true, scrollWheelZoom: !el.dataset.mini }).setView([20, 0], 2);
 	L.tileLayer(el.dataset.tiles, {
 		maxZoom: 18,
 		// The page sends no Referer; OpenStreetMap's tile servers want one
@@ -66,13 +67,17 @@
 				var keys = Object.keys(markers);
 				if (!fitted && keys.length) {
 					fitted = true;
+					map.invalidateSize({ pan: false });
 					map.fitBounds(L.latLngBounds(keys.map(function (k) { return markers[k].getLatLng(); })),
-						{ maxZoom: 10, padding: [30, 30] });
+						{ maxZoom: 10, padding: [30, 30], animate: false });
 				}
 			})
 			.catch(function () { /* the next update tries again */ });
 	}
 
-	update();
+	// The box can change size after the page lays out (and with the window)
+	if (window.ResizeObserver) new ResizeObserver(function () { map.invalidateSize({ pan: false }); }).observe(el);
+	// Fit once the page has its final layout
+	window.addEventListener("load", update);
 	document.addEventListener("dashboard:update", update);
 })();

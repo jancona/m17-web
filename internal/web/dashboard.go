@@ -14,8 +14,7 @@ import (
 // dashData is what the dashboard shows.
 type dashData struct {
 	// Tab is the dashboard page: "status", "messages" or "map"
-	Tab  string
-	Tabs []dashTab
+	Tab string
 	// LivePath is where the page's script fetches its live part
 	LivePath string
 	Station  platform.Current
@@ -23,16 +22,22 @@ type dashData struct {
 	Live    bool
 	Status  activity.Status
 	OnAir   []activity.Entry // being heard now
-	Entries []activity.Entry // last heard, newest first
-	// Messages are the text messages, newest first (messages tab)
+	Entries []activity.Entry // last heard, newest first, filtered by Prefs
+	// Caller is who's on air now, or the last heard (nil if nobody yet)
+	Caller *activity.Entry
+	// Prefs are the viewer's choices for the list
+	Prefs feedPrefs
+	// Messages are the text messages, newest first (messages tab; the
+	// latest few on the status page)
 	Messages []activity.Entry
 	// Positions are the stations' last positions, newest first (map tab)
 	Positions []activity.StationPosition
-	// Tiles is the map's tile URL template (map tab)
+	// Tiles is the map's tile URL template (status and map pages)
 	Tiles string
 }
 
-// dashTab is one of the dashboard's pages.
+// dashTab is one of the dashboard's pages: the status page, and the
+// messages and map pages it links to.
 type dashTab struct{ ID, Path, Title string }
 
 // LivePath is where the page's script fetches its live part.
@@ -56,6 +61,9 @@ const mapTiles = "https://tile.openstreetmap.org"
 
 // dashEntries is how many last-heard entries the dashboard shows.
 const dashEntries = 50
+
+// dashMessages is how many messages the status page shows.
+const dashMessages = 3
 
 // sseKeepalive is how often an idle event stream sends a comment, so
 // proxies and browsers keep it open.
@@ -87,7 +95,7 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*
 	if err != nil {
 		return nil, err
 	}
-	d := dashData{Tab: tab, Tabs: dashTabs, Station: cur, Live: s.activity != nil}
+	d := dashData{Tab: tab, Station: cur, Live: s.activity != nil}
 	title, live := "Dashboard", "/dashboard/live"
 	for _, t := range dashTabs {
 		if t.ID == tab {
@@ -95,8 +103,12 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*
 		}
 	}
 	d.LivePath = live
-	if tab == "map" {
+	if tab != "messages" {
 		d.Tiles = mapTiles + "/{z}/{x}/{y}.png"
+	}
+	if tab == "status" {
+		d.Prefs = readFeedPrefs(w, r)
+		d.LivePath += "?" + d.Prefs.Query()
 	}
 	switch {
 	case s.activity == nil:
@@ -114,7 +126,15 @@ func (s *Server) dashPage(w http.ResponseWriter, r *http.Request, tab string) (*
 				d.OnAir = append(d.OnAir, e)
 			}
 		}
-		d.Entries = entries[:min(len(entries), dashEntries)]
+		switch {
+		case len(d.OnAir) > 0:
+			d.Caller = &d.OnAir[0]
+		case len(entries) > 0:
+			d.Caller = &entries[0]
+		}
+		d.Entries = d.Prefs.filter(entries, dashEntries)
+		m := s.activity.Messages()
+		d.Messages = m[:min(len(m), dashMessages)]
 	}
 	return &page{Title: title, Public: true, Dash: &d, LoggedIn: sess.LoggedIn, CSRF: sess.CSRF, NoScriptRefresh: 15}, nil
 }
@@ -126,7 +146,7 @@ func (s *Server) dashboard(tab string) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
-		if tab == "map" {
+		if p.Dash.Tiles != "" {
 			// The map's tiles
 			w.Header().Set("Content-Security-Policy", strings.Replace(csp, "img-src 'self' data:", "img-src 'self' data: "+mapTiles, 1))
 			p.Styles = []string{"/setup/static/leaflet/leaflet.css"}

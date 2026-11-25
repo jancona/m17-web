@@ -410,6 +410,16 @@ func TestCaptivePortalAndHeaders(t *testing.T) {
 	if code != 200 || !strings.Contains(css, "prefers-color-scheme") {
 		t.Errorf("static CSS: %d", code)
 	}
+	// The M17 logo as the tab icon, on every page
+	_, _, page := h.get(h.client, "/dashboard/")
+	for _, icon := range []string{"/setup/static/favicon.svg", "/setup/static/favicon-32.png", "/setup/static/apple-touch-icon.png"} {
+		if !strings.Contains(page, `href="`+icon+`"`) {
+			t.Errorf("no link to %s", icon)
+		}
+		if code, _, _ := h.get(h.client, icon); code != 200 {
+			t.Errorf("GET %s: %d", icon, code)
+		}
+	}
 }
 
 // TestSSHStep: password logins need a new m17 password, and the password
