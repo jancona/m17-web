@@ -21,9 +21,7 @@ type panelData struct {
 	WiFi     platform.WiFiStatus
 	Keys     []platform.SSHKey
 	OS       platform.OSStatus
-	Check    platform.JobStatus // the last update check
-	Install  platform.JobStatus // the last update install
-	Packages platform.JobStatus // the last "Update now" of the M17 packages
+	Updates  updatesView // the Updates card
 	Sys      platform.SystemInfo
 	LogNames []string
 	LogName  string
@@ -69,25 +67,19 @@ func (s *Server) loadPanel(ctx context.Context, p *page, id string, q url.Values
 		if err := note(err); err != nil || p.Panels.Unsupported[id] {
 			return err
 		}
-		if p.Panels.Check, err = s.plat.JobStatus(ctx, "os-check"); err != nil {
-			return err
+		var jobs [4]platform.JobStatus
+		for i, name := range []string{"check", "os-check", "os-install", "packages"} {
+			if jobs[i], err = s.plat.JobStatus(ctx, name); err != nil {
+				return err
+			}
 		}
-		if p.Panels.Install, err = s.plat.JobStatus(ctx, "os-install"); err != nil {
-			return err
-		}
-		if p.Panels.Check.Running() || p.Panels.Install.Running() {
+		p.Panels.Updates = buildUpdatesView(jobs[0], jobs[1], jobs[2], jobs[3])
+		if p.Panels.Updates.Busy != "" {
 			p.Refresh = 3
 		}
 	case "sysinfo":
 		p.Panels.Sys, err = s.plat.SystemInfo(ctx)
 		return err
-	case "packages":
-		if p.Panels.Packages, err = s.plat.JobStatus(ctx, "packages"); err != nil {
-			return err
-		}
-		if p.Panels.Packages.Running() {
-			p.Refresh = 3
-		}
 	case "firmware":
 		if p.Firmware, err = s.adminFirmware(ctx, p.Draft); err != nil {
 			return err
@@ -204,21 +196,19 @@ func (s *Server) submitPanel(w http.ResponseWriter, r *http.Request, sess *auth.
 		saved("Key removed.", nil)
 		return probs, true
 
-	case "os/check", "os/install":
-		job := "os-" + f.Get("action")
-		if err := s.plat.StartJob(ctx, job); err != nil {
+	case "os/check", "os/install", "os/packages":
+		job := map[string]string{"check": "check", "install": "os-install", "packages": "packages"}[f.Get("action")]
+		err := s.plat.StartJob(ctx, job)
+		if job == "check" && errors.Is(err, platform.ErrUnsupported) {
+			// An image whose helper checks the OS only
+			job = "os-check"
+			err = s.plat.StartJob(ctx, job)
+		}
+		if err != nil {
 			return fail("os", err)
 		}
 		s.log.Info("job started", "job", job)
 		http.Redirect(w, r, "/admin/updates#os", http.StatusSeeOther)
-		return probs, true
-
-	case "packages/update":
-		if err := s.plat.StartJob(ctx, "packages"); err != nil {
-			return fail("packages", err)
-		}
-		s.log.Info("job started", "job", "packages")
-		http.Redirect(w, r, "/admin/updates#packages", http.StatusSeeOther)
 		return probs, true
 
 	case "os/rollback":

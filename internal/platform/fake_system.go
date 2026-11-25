@@ -23,6 +23,9 @@ type fakeSystem struct {
 	Unsupported bool
 	// health is what Health returns
 	health []Problem
+	// NoCheckJob makes the "check" job unknown, as on an image whose
+	// helper checks the OS only
+	NoCheckJob bool
 }
 
 func newFakeSystem() fakeSystem {
@@ -163,9 +166,19 @@ func (f *Fake) StartJob(ctx context.Context, name string) error {
 		f.sys.jobs[name] = JobStatus{State: "ok", Exit: 0, Started: now, Log: []string{"m17-hotspot-os update check", "Current:    2026.11.23.1", "Available:  2026.11.25.1 (2026-11-25)", "Signed:     true", "Status:     update available"}}
 	case "os-install":
 		f.sys.jobs[name] = JobStatus{State: "ok", Exit: 0, Started: now, Log: []string{"Downloading m17-hotspot-os-2026.11.25.1.rootfs.tar.xz...", "Update 2026.11.25.1 installed to slot B.", "Reboot to activate it."}}
-		f.sys.os.SlotB = "2026.11.25.1"
+		// As m17os-upgrade does: the new slot becomes active and pending
+		// before the restart
+		f.sys.os.SlotB, f.sys.os.ActiveSlot, f.sys.os.PreviousSlot, f.sys.os.Pending = "2026.11.25.1", "B", "A", true
 	case "packages":
 		f.sys.jobs[name] = JobStatus{State: "ok", Exit: 0, Started: now, Log: []string{"updated packages: m17-gateway 0.9.10-r0, m17-gateway-openrc 0.9.10-r0", "Restarted m17-gateway"}}
+	case "check":
+		if f.sys.NoCheckJob {
+			return ErrUnsupported
+		}
+		f.sys.jobs[name] = JobStatus{State: "ok", Exit: 0, Started: now, Log: []string{
+			"System version 2026.11.25.1 is available", "OS_AVAILABLE=2026.11.25.1",
+			"M17 package updates: m17-gateway 0.9.10-r0", "PACKAGES_AVAILABLE=m17-gateway 0.9.10-r0",
+		}}
 	default:
 		return fmt.Errorf("admin helper job-start: unknown job: %s", name)
 	}
@@ -270,4 +283,11 @@ func (f *Fake) SetHealth(ps ...Problem) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sys.health = ps
+}
+
+// SetNoCheckJob makes the "check" job unknown (an older image).
+func (f *Fake) SetNoCheckJob(b bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sys.NoCheckJob = b
 }
