@@ -1,0 +1,294 @@
+{{/*
+Sections: the fields of each group of settings, shared by the setup
+wizard's steps and the admin pages. Each section's form, buttons and
+submit URL come from the page around it. Field names are unique across
+sections, so .Errors and .Warnings can be shared by a page with several.
+*/}}
+
+{{define "wizard-actions"}}
+	<div class="actions">
+		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
+		<button type="submit">Continue</button>
+	</div>
+{{end}}
+
+{{/* section renders the fields of section .ID */}}
+{{define "section"}}
+{{- if eq .ID "adminpw"}}{{template "f-adminpw" .}}
+{{- else if eq .ID "wifi"}}{{template "f-wifi" .}}
+{{- else if eq .ID "callsign"}}{{template "f-callsign" .}}
+{{- else if eq .ID "timezone"}}{{template "f-timezone" .}}
+{{- else if eq .ID "hostname"}}{{template "f-hostname" .}}
+{{- else if eq .ID "hat"}}{{template "f-hat" .}}
+{{- else if eq .ID "frequency"}}{{template "f-frequency" .}}
+{{- else if eq .ID "reflector"}}{{template "f-reflector" .}}
+{{- else if eq .ID "updates"}}{{template "f-updates" .}}
+{{- else if eq .ID "ssh"}}{{template "f-ssh" .}}
+{{- else if eq .ID "rerun"}}{{template "f-rerun" .}}
+{{- end}}
+{{end}}
+
+{{define "f-adminpw"}}
+	{{if .Admin}}
+	<label for="current">Current password</label>
+	<input id="current" name="current" type="password" autocomplete="current-password" required
+		{{with index .Errors "current"}}aria-invalid="true"{{end}}>
+	{{with index .Errors "current"}}<p class="error">{{.}}</p>{{end}}
+	{{else if .PasswordSet}}
+	<p>An admin password is set. You can change it here, or leave these fields empty to keep it.</p>
+	{{else}}
+	<p>First, choose an admin password. It protects this setup and the dashboard's Gateway and Settings pages.</p>
+	{{end}}
+	<label for="password">{{if .PasswordSet}}New password{{else}}Password{{end}}</label>
+	<input id="password" name="password" type="password" autocomplete="new-password" minlength="8"
+		{{if or .Admin (not .PasswordSet)}}required{{end}}{{if not .PasswordSet}} autofocus{{end}}
+		{{with index .Errors "password"}}aria-invalid="true" aria-describedby="password-err"{{end}}>
+	<p class="hint">At least 8 characters. It's also the login for the dashboard's Gateway and Settings pages.</p>
+	{{with index .Errors "password"}}<p class="error" id="password-err">{{.}}</p>{{end}}
+	<label for="confirm">Type it again</label>
+	<input id="confirm" name="confirm" type="password" autocomplete="new-password" data-confirms="password"
+		{{if or .Admin (not .PasswordSet)}}required{{end}}
+		{{with index .Errors "confirm"}}aria-invalid="true" aria-describedby="confirm-err"{{end}}>
+	{{with index .Errors "confirm"}}<p class="error" id="confirm-err">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-wifi"}}
+<div class="network">
+	<fieldset>
+		<legend>How does the hotspot connect to the internet?</legend>
+		<label class="choice"><input type="radio" name="connection" value="wifi" {{if .Draft.UseWiFi}}checked{{end}}> WiFi</label>
+		<label class="choice"><input type="radio" name="connection" value="ethernet" {{if not .Draft.UseWiFi}}checked{{end}}> Ethernet cable (no WiFi)</label>
+	</fieldset>
+
+	<div class="wifi-only">
+	<fieldset>
+		<legend>WiFi network</legend>
+		{{$sel := .Draft.WiFiSSID}}{{$found := false}}
+		<ul class="networks">
+		{{range .Networks}}{{if eq .SSID $sel}}{{$found = true}}{{end}}
+			<li><label class="choice">
+				<input type="radio" name="wifi_ssid" value="{{.SSID}}" {{if eq .SSID $sel}}checked{{end}}>
+				<span class="ssid">{{.SSID}}</span>
+				<span class="meta"><span class="bars" title="{{.Signal}} dBm">{{signalBars .Signal}}</span> {{band .Frequency}}{{if not .Secured}} · open{{end}}</span>
+			</label></li>
+		{{else}}
+			<li class="hint">No networks found. Type the network's name below.</li>
+		{{end}}
+			<li><label class="choice">
+				<input type="radio" name="wifi_ssid" value="-other-" {{if or (and $sel (not $found)) (not .Networks)}}checked{{end}}>
+				<span class="ssid">Other network…</span>
+			</label></li>
+		</ul>
+		<div class="other-ssid">
+			<label for="wifi_ssid_other">Network name, if not listed</label>
+			<input id="wifi_ssid_other" name="wifi_ssid_other" autocomplete="off" autocapitalize="none" spellcheck="false"
+				value="{{if not $found}}{{$sel}}{{end}}">
+		</div>
+		{{with index .Errors "wifi_ssid"}}<p class="error">{{.}}</p>{{end}}
+	</fieldset>
+
+	<label for="wifi_password">WiFi password</label>
+	<input id="wifi_password" name="wifi_password" type="password" autocomplete="off"
+		{{with index .Errors "wifi_password"}}aria-invalid="true"{{end}}>
+	<p class="hint">{{if .Draft.WiFiPassword}}Already entered: leave empty to keep it.{{else if .Draft.SavedSSIDs}}For a network the hotspot already knows, leave this empty to keep its saved password. Otherwise leave it empty only for an open network.{{else}}Leave empty for an open network.{{end}}</p>
+	{{with index .Errors "wifi_password"}}<p class="error">{{.}}</p>{{end}}
+
+	<label for="wifi_country">Country</label>
+	<select id="wifi_country" name="wifi_country">
+		{{$c := .Draft.WiFiCountry}}
+		{{range .Countries}}<option value="{{.Code}}" {{if eq .Code $c}}selected{{end}}>{{.Name}}</option>{{end}}
+	</select>
+	<p class="hint">Sets the WiFi channels and power allowed where you are.</p>
+	{{with index .Errors "wifi_country"}}<p class="error">{{.}}</p>{{end}}
+	</div>
+	{{if .Admin}}<p class="warning">Saving reconnects the hotspot. If the new settings don't work, it starts its setup access point after 90 seconds.</p>{{end}}
+</div>
+{{end}}
+
+{{define "f-callsign"}}
+	<div class="row">
+		<div class="grow">
+			<label for="callsign">Callsign</label>
+			<input id="callsign" name="callsign" value="{{.Draft.Callsign}}" required autocapitalize="characters"
+				autocomplete="off" spellcheck="false" maxlength="9" class="upper"
+				{{with index .Errors "callsign"}}aria-invalid="true"{{end}}>
+		</div>
+		<div>
+			<label for="suffix">Suffix <span class="optional">(optional)</span></label>
+			<input id="suffix" name="suffix" value="{{.Draft.Suffix}}" maxlength="1" size="2" autocapitalize="characters"
+				autocomplete="off" class="upper short" {{with index .Errors "suffix"}}aria-invalid="true"{{end}}>
+		</div>
+	</div>
+	<p class="hint">The suffix is one letter or digit after your callsign, e.g. H for a hotspot: N0CALL H.</p>
+	{{with index .Errors "callsign"}}<p class="error">{{.}}</p>{{end}}
+	{{with index .Warnings "callsign"}}<p class="warning">{{.}}</p>{{end}}
+	{{with index .Errors "suffix"}}<p class="error">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-timezone"}}
+	<label for="timezone">Time zone</label>
+	<select id="timezone" name="timezone" data-guess-timezone>
+		{{$tz := .Draft.TimeZone}}
+		{{range .TimeZones}}<option value="{{.}}" {{if eq . $tz}}selected{{end}}>{{.}}</option>{{end}}
+	</select>
+	<p class="hint">Times on the dashboard, and the hour when updates run, use it.</p>
+	{{with index .Errors "timezone"}}<p class="error">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-hostname"}}
+	<label for="hostname">Hotspot name on the network</label>
+	<input id="hostname" name="hostname" value="{{.Draft.Hostname}}" required autocapitalize="none"
+		autocomplete="off" spellcheck="false" maxlength="63" {{with index .Errors "hostname"}}aria-invalid="true"{{end}}>
+	<p class="hint">You'll reach the hotspot at http://<span data-mirror="hostname">{{.Draft.Hostname}}</span>.local/</p>
+	{{with index .Errors "hostname"}}<p class="error">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-hat"}}
+	{{if .HATChecked}}
+	{{if .HAT.Type}}
+	<div class="notice ok">
+		<p><strong>Found a{{if eq .HAT.Type "mmdvm"}}n MMDVM{{else}} CC1200{{end}} HAT.</strong></p>
+		{{with .HAT.Ident}}<p class="ident">{{.}}</p>{{end}}
+	</div>
+	{{else}}
+	<div class="notice">
+		<p>No HAT answered on the serial port. That's expected for the SX1255 HAT, which doesn't use it. Otherwise, check the HAT is seated on the Pi's header.</p>
+	</div>
+	{{end}}
+	{{end}}
+	<fieldset>
+		<legend>Which radio HAT is on your Pi?</legend>
+		{{$t := .Draft.HATType}}{{if .HAT.Type}}{{$t = .HAT.Type}}{{end}}
+		<label class="choice card"><input type="radio" name="hat_type" value="cc1200" {{if eq $t "cc1200"}}checked{{end}}>
+			<span><strong>CC1200</strong><br><span class="hint">The M17 Project's CC1200 HAT (simplex).</span></span></label>
+		<label class="choice card"><input type="radio" name="hat_type" value="mmdvm" {{if eq $t "mmdvm"}}checked{{end}}>
+			<span><strong>MMDVM</strong><br><span class="hint">MMDVM_HS hotspot boards (simplex or duplex) and MMDVM repeater boards, with M17 firmware.</span></span></label>
+		<label class="choice card"><input type="radio" name="hat_type" value="sx1255" {{if eq $t "sx1255"}}checked{{end}}>
+			<span><strong>SX1255</strong><br><span class="hint">The SX1255 HAT. Needs one extra restart to enable its audio interface.</span></span></label>
+	</fieldset>
+	{{with index .Errors "hat_type"}}<p class="error">{{.}}</p>{{end}}
+	{{if .Admin}}
+	<p class="hint">Detect asks the HAT on the serial port what it is. It stops the gateway for a few seconds.</p>
+	{{end}}
+{{end}}
+
+{{define "f-frequency"}}
+	{{$duplexOK := ne .Draft.HATType "cc1200"}}
+	{{if $duplexOK}}
+	<label class="choice"><input type="checkbox" name="duplex" id="duplex" {{if .Draft.Duplex}}checked{{end}}>
+		Duplex: receive and transmit on different frequencies at the same time</label>
+	<p class="hint">Only with a duplex board (two radios), e.g. the MMDVM_HS_Dual_Hat.</p>
+	{{end}}
+
+	<label for="rx_mhz"><span class="simplex-label">Frequency</span><span class="duplex-label">Receive frequency</span> (MHz)</label>
+	<input id="rx_mhz" name="rx_mhz" inputmode="decimal" value="{{mhz .Draft.RXFrequency}}" required placeholder="439.500"
+		{{with index .Errors "rx_mhz"}}aria-invalid="true"{{end}}>
+	{{with index .Errors "rx_mhz"}}<p class="error">{{.}}</p>{{end}}
+	{{with index .Warnings "rx_mhz"}}<p class="warning">{{.}}</p>{{end}}
+
+	{{if $duplexOK}}
+	<div class="duplex-only">
+		<label for="tx_mhz">Transmit frequency (MHz)</label>
+		<input id="tx_mhz" name="tx_mhz" inputmode="decimal" value="{{if .Draft.Duplex}}{{mhz .Draft.TXFrequency}}{{end}}" placeholder="434.500"
+			{{with index .Errors "tx_mhz"}}aria-invalid="true"{{end}}>
+		{{with index .Errors "tx_mhz"}}<p class="error">{{.}}</p>{{end}}
+		{{with index .Warnings "tx_mhz"}}<p class="warning">{{.}}</p>{{end}}
+	</div>
+	{{end}}
+	<p class="hint">Choose a frequency your local band plan sets aside for digital voice or hotspots, and that nobody nearby uses.</p>
+
+	{{if .Draft.UsesPower}}
+	<label for="power">Transmit power (dBm)</label>
+	<input id="power" name="power" type="number" min="-16" max="14" step="1" value="{{.Draft.Power}}" class="short"
+		{{with index .Errors "power"}}aria-invalid="true"{{end}}>
+	<p class="hint">10 dBm is 10 mW: plenty for a hotspot in the same building. The CC1200 HAT goes from -16 to 14 dBm.</p>
+	{{with index .Errors "power"}}<p class="error">{{.}}</p>{{end}}
+	{{else if .Draft.UsesRFLevel}}
+	<label for="rf_level">Transmit power (%)</label>
+	<input id="rf_level" name="rf_level" type="number" min="1" max="100" step="1" value="{{.Draft.RFLevel}}" class="short"
+		{{with index .Errors "rf_level"}}aria-invalid="true"{{end}}>
+	<p class="hint">100 is the board's full power. Turn it down if the hotspot sits right next to your radio, or to keep its signal from reaching further than it needs to. It sets the board's amplifier, so it's not a figure in watts: on an MMDVM_HS_Dual_Hat, 10% measured about 18 dB below 100%.</p>
+	{{with index .Errors "rf_level"}}<p class="error">{{.}}</p>{{end}}
+	{{else if eq .Draft.HATType "sx1255"}}
+	<p class="hint">The SX1255 HAT's transmit level is set with DACGain and MixerGain in the gateway's [Modem] section, not here.</p>
+	{{else}}
+	<p class="hint">This is an MMDVM repeater board: its transmit power comes from the radio attached to it.</p>
+	{{end}}
+{{end}}
+
+{{define "f-reflector"}}
+	{{if not .Admin}}<p>The reflector links your hotspot to other M17 users over the internet. You can change it later on the Station page.</p>{{end}}
+	<fieldset>
+		<legend>Reflector</legend>
+		<label for="reflector-filter" class="js-only sub">Search</label>
+		<input id="reflector-filter" type="search" class="js-only" placeholder="e.g. M17-USA" autocomplete="off"
+			autocapitalize="characters" data-filter="reflectors">
+		{{$r := .Draft.Reflector}}
+		<ul class="choices scroll" id="reflectors">
+			<li><label class="choice"><input type="radio" name="reflector" value="" {{if eq $r ""}}checked{{end}}>
+				<span>None: RF only, no internet link</span></label></li>
+			{{range .Reflectors}}
+			<li data-name="{{.Name}}"><label class="choice"><input type="radio" name="reflector" value="{{.Name}}" {{if eq .Name $r}}checked{{end}}>
+				<span>{{.Name}}</span></label></li>
+			{{end}}
+		</ul>
+		<p class="hint js-only" id="reflectors-none" hidden>No reflector matches.</p>
+	</fieldset>
+	{{with index .Errors "reflector"}}<p class="error">{{.}}</p>{{end}}
+
+	<label for="module">Module</label>
+	{{$m := .Draft.Module}}
+	<select id="module" name="module" class="short" {{with index .Errors "module"}}aria-invalid="true"{{end}}>
+		{{range modules}}<option {{if eq . $m}}selected{{end}}>{{.}}</option>{{end}}
+	</select>
+	<p class="hint">Each reflector has rooms, A to Z. Ask your local group which one they use.</p>
+	{{with index .Errors "module"}}<p class="error">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-updates"}}
+	<fieldset>
+		<legend>When a new version is available</legend>
+		{{$a := .Draft.AutoUpdate}}
+		<label class="choice card"><input type="radio" name="auto_update" value="auto" {{if eq $a "auto"}}checked{{end}}>
+			<span><strong>Install it automatically</strong> (recommended)<br>
+			<span class="hint">Once a day, never during a transmission. If a new system version doesn't start properly, the hotspot goes back to the previous one by itself.</span></span></label>
+		<label class="choice card"><input type="radio" name="auto_update" value="notify" {{if eq $a "notify"}}checked{{end}}>
+			<span><strong>Only check</strong><br><span class="hint">Record what's available; install it yourself.</span></span></label>
+		<label class="choice card"><input type="radio" name="auto_update" value="off" {{if eq $a "off"}}checked{{end}}>
+			<span><strong>Don't check</strong></span></label>
+	</fieldset>
+	{{with index .Errors "auto_update"}}<p class="error">{{.}}</p>{{end}}
+
+	<label for="update_hour">Hour to update</label>
+	{{$h := .Draft.UpdateHour}}
+	<select id="update_hour" name="update_hour" class="short">
+		{{range hours}}<option value="{{.}}" {{if eq . $h}}selected{{end}}>{{printf "%02d:00" .}}</option>{{end}}
+	</select>
+	<p class="hint">In the hotspot's time zone ({{.Draft.TimeZone}}). It may restart then, so pick a quiet time.</p>
+	{{with index .Errors "update_hour"}}<p class="error">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-ssh"}}
+	{{if not .Admin}}<p>SSH lets you log in to the hotspot from a computer, as the user <strong>m17</strong>, to look at logs or change things the wizard doesn't cover. You can skip this step if you don't need it.</p>{{end}}
+	<label for="ssh_key">Add an SSH public key</label>
+	<textarea id="ssh_key" name="ssh_key" rows="4" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="ssh-ed25519 AAAA… you@computer">{{.Draft.SSHKey}}</textarea>
+	<p class="hint">The contents of a <code>.pub</code> file, such as <code>~/.ssh/id_ed25519.pub</code>. {{if gt .Draft.SSHKeys 0}}The hotspot already has {{.Draft.SSHKeys}} key{{if gt .Draft.SSHKeys 1}}s{{end}}; they stay.{{end}}</p>
+	{{with index .Errors "ssh_key"}}<p class="error">{{.}}</p>{{end}}
+	{{with index .Warnings "ssh_key"}}<p class="warning">{{.}}</p>{{end}}
+
+	<label class="choice"><input type="checkbox" name="ssh_password_logins" {{if .Draft.SSHPasswordLogins}}checked{{end}}>
+		<span>Allow password logins<br><span class="hint">Keys are safer. Allow passwords if you'd rather not set up a key.</span></span></label>
+
+	<label for="user_password">New password for m17</label>
+	<input id="user_password" name="user_password" type="password" autocomplete="new-password">
+	<p class="hint">{{if .Draft.UserPassword}}A new password is set; leave this empty to keep it.{{else}}Needed to allow password logins. Leave it empty to keep the current one.{{end}}</p>
+	{{with index .Errors "user_password"}}<p class="error">{{.}}</p>{{end}}
+
+	<label for="user_confirm">Type it again</label>
+	<input id="user_confirm" name="user_confirm" type="password" autocomplete="new-password" data-confirms="user_password">
+	{{with index .Errors "user_confirm"}}<p class="error" id="user_confirm-err">{{.}}</p>{{end}}
+{{end}}
+
+{{define "f-rerun"}}
+	<p>Go through the setup steps again, starting from the hotspot's current settings. Nothing changes until you apply them at the end, and you can jump to any step.</p>
+{{end}}

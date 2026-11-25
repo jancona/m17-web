@@ -1,30 +1,7 @@
 {{define "content"}}
 <form method="post" action="/setup/updates">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-	<fieldset>
-		<legend>When a new version is available</legend>
-		{{$a := .Draft.AutoUpdate}}
-		<label class="choice card"><input type="radio" name="auto_update" value="auto" {{if eq $a "auto"}}checked{{end}}>
-			<span><strong>Install it automatically</strong> (recommended)<br>
-			<span class="hint">Once a day, never during a transmission. If a new system version doesn't start properly, the hotspot goes back to the previous one by itself.</span></span></label>
-		<label class="choice card"><input type="radio" name="auto_update" value="notify" {{if eq $a "notify"}}checked{{end}}>
-			<span><strong>Only check</strong><br><span class="hint">Record what's available; install it yourself.</span></span></label>
-		<label class="choice card"><input type="radio" name="auto_update" value="off" {{if eq $a "off"}}checked{{end}}>
-			<span><strong>Don't check</strong></span></label>
-	</fieldset>
-	{{with index .Errors "auto_update"}}<p class="error">{{.}}</p>{{end}}
-
-	<label for="update_hour">Hour to update</label>
-	{{$h := .Draft.UpdateHour}}
-	<select id="update_hour" name="update_hour" class="short">
-		{{range hours}}<option value="{{.}}" {{if eq . $h}}selected{{end}}>{{printf "%02d:00" .}}</option>{{end}}
-	</select>
-	<p class="hint">In the hotspot's time zone ({{.Draft.TimeZone}}). It may restart then, so pick a quiet time.</p>
-	{{with index .Errors "update_hour"}}<p class="error">{{.}}</p>{{end}}
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-updates" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}

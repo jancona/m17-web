@@ -3,16 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} · M17 hotspot setup</title>
+<title>{{.Title}} · M17 hotspot</title>
 {{with .Refresh}}<meta http-equiv="refresh" content="{{.}}">{{end}}
 <link rel="stylesheet" href="/setup/static/style.css">
 <script src="/setup/static/app.js" defer></script>
 </head>
-<body>
+<body{{if .Admin}} class="admin"{{end}}>
+<div class="busybar" aria-hidden="true"></div>
 <header class="top">
-	<div class="brand">M17 hotspot <span>setup</span></div>
+	<div class="brand">M17 hotspot <span>{{if .Admin}}admin{{else}}setup{{end}}</span></div>
 	<div class="toplinks">
 		<a href="/">Dashboard</a>
+		{{if and .LoggedIn (not .Admin)}}<a href="/admin/">Admin</a>{{end}}
 		{{if .LoggedIn}}
 		<form method="post" action="/setup/logout" class="logout">
 			<input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -22,13 +24,32 @@
 	</div>
 </header>
 
+{{if .Admin}}
+<div class="adminwrap">
+<nav class="side" aria-label="Admin pages">
+	{{$cur := .AdminPage.ID}}
+	{{range .Nav}}
+	{{with .Title}}<p class="group">{{.}}</p>{{end}}
+	<ul>
+		{{range .Pages}}<li><a href="/admin/{{.ID}}"{{if eq .ID $cur}} aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}
+	</ul>
+	{{end}}
+</nav>
+<main>
+	<h1>{{.Title}}</h1>
+	{{template "content" .}}
+</main>
+</div>
+{{else}}
+
 {{if .Steps}}
 <nav class="progress" aria-label="Setup steps">
 	<ol>
 	{{$cur := .Step}}{{$st := .State}}
 	{{range .Steps}}
+		{{$open := and $st (or $st.Rerun (done $st .ID))}}
 		<li class="{{if eq .ID $cur}}current{{else if done $st .ID}}done{{end}}"{{if eq .ID $cur}} aria-current="step"{{end}}>
-			{{if and (done $st .ID) (ne .ID $cur)}}<a href="/setup/{{.ID}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}
+			{{if and $open (ne .ID $cur)}}<a href="/setup/{{.ID}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}
 		</li>
 	{{end}}
 	</ol>
@@ -36,9 +57,10 @@
 {{end}}
 
 <main>
-	{{if and .Step (ne .Step "done")}}<p class="stepno">Step {{stepIndex .Step}} of {{len .Steps}}</p>{{end}}
+	{{if and .Step (ne .Step "done")}}<p class="stepno">Step {{stepIndex .Step}} of {{len .Steps}}{{if and .State .State.Rerun}} · setup again: choose any step above{{end}}</p>{{end}}
 	<h1>{{.Title}}</h1>
 	{{template "content" .}}
 </main>
+{{end}}
 </body>
 </html>

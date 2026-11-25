@@ -1,57 +1,7 @@
 {{define "content"}}
-<form method="post" action="/setup/network" class="network">
+<form method="post" action="/setup/network">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-	<fieldset>
-		<legend>How does the hotspot connect to the internet?</legend>
-		<label class="choice"><input type="radio" name="connection" value="wifi" {{if .Draft.UseWiFi}}checked{{end}}> WiFi</label>
-		<label class="choice"><input type="radio" name="connection" value="ethernet" {{if not .Draft.UseWiFi}}checked{{end}}> Ethernet cable (no WiFi)</label>
-	</fieldset>
-
-	<div class="wifi-only">
-	<fieldset>
-		<legend>WiFi network</legend>
-		{{$sel := .Draft.WiFiSSID}}{{$found := false}}
-		<ul class="networks">
-		{{range .Networks}}{{if eq .SSID $sel}}{{$found = true}}{{end}}
-			<li><label class="choice">
-				<input type="radio" name="wifi_ssid" value="{{.SSID}}" {{if eq .SSID $sel}}checked{{end}}>
-				<span class="ssid">{{.SSID}}</span>
-				<span class="meta"><span class="bars" title="{{.Signal}} dBm">{{signalBars .Signal}}</span> {{band .Frequency}}{{if not .Secured}} · open{{end}}</span>
-			</label></li>
-		{{else}}
-			<li class="hint">No networks found. Type the network's name below.</li>
-		{{end}}
-			<li><label class="choice">
-				<input type="radio" name="wifi_ssid" value="-other-" {{if or (and $sel (not $found)) (not .Networks)}}checked{{end}}>
-				<span class="ssid">Other network…</span>
-			</label></li>
-		</ul>
-		<div class="other-ssid">
-			<label for="wifi_ssid_other">Network name, if not listed</label>
-			<input id="wifi_ssid_other" name="wifi_ssid_other" autocomplete="off" autocapitalize="none" spellcheck="false"
-				value="{{if not $found}}{{$sel}}{{end}}">
-		</div>
-		{{with index .Errors "wifi_ssid"}}<p class="error">{{.}}</p>{{end}}
-	</fieldset>
-
-	<label for="wifi_password">WiFi password</label>
-	<input id="wifi_password" name="wifi_password" type="password" autocomplete="off"
-		{{with index .Errors "wifi_password"}}aria-invalid="true"{{end}}>
-	<p class="hint">{{if .Draft.WiFiPassword}}Already entered: leave empty to keep it.{{else if .Draft.SavedSSIDs}}For a network the hotspot already knows, leave this empty to keep its saved password. Otherwise leave it empty only for an open network.{{else}}Leave empty for an open network.{{end}}</p>
-	{{with index .Errors "wifi_password"}}<p class="error">{{.}}</p>{{end}}
-
-	<label for="wifi_country">Country</label>
-	<select id="wifi_country" name="wifi_country">
-		{{$c := .Draft.WiFiCountry}}
-		{{range .Countries}}<option value="{{.Code}}" {{if eq .Code $c}}selected{{end}}>{{.Name}}</option>{{end}}
-	</select>
-	<p class="hint">Sets the WiFi channels and power allowed where you are.</p>
-	{{with index .Errors "wifi_country"}}<p class="error">{{.}}</p>{{end}}
-	</div>
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-wifi" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}

@@ -3,7 +3,9 @@ package platform
 import (
 	"context"
 	"errors"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -259,6 +261,20 @@ func (f *Fake) Apply(ctx context.Context, settings []Setting) (Result, error) {
 			f.current.Reflector = s.Value
 		case s.Key == "module":
 			f.current.Module = s.Value
+		case s.Key == "frequency":
+			f.current.RXFrequency, f.current.TXFrequency = fakeHz(s.Value), fakeHz(s.Value)
+		case s.Key == "rx_frequency":
+			f.current.RXFrequency = fakeHz(s.Value)
+		case s.Key == "tx_frequency":
+			f.current.TXFrequency = fakeHz(s.Value)
+		case s.Key == "duplex":
+			f.current.Duplex = s.Value == "true"
+		case s.Key == "power":
+			f.current.Power, _ = strconv.Atoi(s.Value)
+		case s.Key == "rf_level":
+			f.current.RFLevel, _ = strconv.Atoi(s.Value)
+		case s.Key == "update_hour":
+			f.current.UpdateHour, _ = strconv.Atoi(s.Value)
 		case s.Key == "auto_update":
 			f.current.AutoUpdate = s.Value
 		case s.Key == "ssh_key":
@@ -275,3 +291,9 @@ func (f *Fake) Apply(ctx context.Context, settings []Setting) (Result, error) {
 }
 
 var _ Platform = (*Fake)(nil)
+
+// fakeHz reads a frequency in MHz, as m17-config.txt has it, in Hz.
+func fakeHz(mhz string) int64 {
+	f, _ := strconv.ParseFloat(mhz, 64)
+	return int64(math.Round(f * 1e6))
+}

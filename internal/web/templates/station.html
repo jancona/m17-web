@@ -1,41 +1,9 @@
 {{define "content"}}
 <form method="post" action="/setup/station">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-	<div class="row">
-		<div class="grow">
-			<label for="callsign">Callsign</label>
-			<input id="callsign" name="callsign" value="{{.Draft.Callsign}}" required autocapitalize="characters"
-				autocomplete="off" spellcheck="false" maxlength="9" class="upper"
-				{{with index .Errors "callsign"}}aria-invalid="true"{{end}}>
-		</div>
-		<div>
-			<label for="suffix">Suffix <span class="optional">(optional)</span></label>
-			<input id="suffix" name="suffix" value="{{.Draft.Suffix}}" maxlength="1" size="2" autocapitalize="characters"
-				autocomplete="off" class="upper short" {{with index .Errors "suffix"}}aria-invalid="true"{{end}}>
-		</div>
-	</div>
-	<p class="hint">The suffix is one letter or digit after your callsign, e.g. H for a hotspot: N0CALL H.</p>
-	{{with index .Errors "callsign"}}<p class="error">{{.}}</p>{{end}}
-	{{with index .Warnings "callsign"}}<p class="warning">{{.}}</p>{{end}}
-	{{with index .Errors "suffix"}}<p class="error">{{.}}</p>{{end}}
-
-	<label for="timezone">Time zone</label>
-	<select id="timezone" name="timezone" data-guess-timezone>
-		{{$tz := .Draft.TimeZone}}
-		{{range .TimeZones}}<option value="{{.}}" {{if eq . $tz}}selected{{end}}>{{.}}</option>{{end}}
-	</select>
-	<p class="hint">Times on the dashboard, and the hour when updates run, use it.</p>
-	{{with index .Errors "timezone"}}<p class="error">{{.}}</p>{{end}}
-
-	<label for="hostname">Hotspot name on the network</label>
-	<input id="hostname" name="hostname" value="{{.Draft.Hostname}}" required autocapitalize="none"
-		autocomplete="off" spellcheck="false" maxlength="63" {{with index .Errors "hostname"}}aria-invalid="true"{{end}}>
-	<p class="hint">You'll reach the hotspot at http://<span data-mirror="hostname">{{.Draft.Hostname}}</span>.local/</p>
-	{{with index .Errors "hostname"}}<p class="error">{{.}}</p>{{end}}
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-callsign" .}}
+	{{template "f-timezone" .}}
+	{{template "f-hostname" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}

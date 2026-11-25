@@ -240,8 +240,9 @@ func TestLoginRequiredOncePasswordSet(t *testing.T) {
 	if code != http.StatusUnauthorized || !strings.Contains(body, "isn&#39;t the admin password") {
 		t.Errorf("wrong password: %d", code)
 	}
+	// The hotspot is set up, so logging in opens the admin pages
 	code, loc, _ = h.post(other, "/setup/login", url.Values{"password": {"long-enough"}})
-	h.expectRedirect(code, loc, "/setup/")
+	h.expectRedirect(code, loc, "/admin/")
 	code, _, _ = h.get(other, "/setup/password")
 	if code != 200 {
 		t.Errorf("after login, password step: %d", code)

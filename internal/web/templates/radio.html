@@ -1,51 +1,7 @@
 {{define "content"}}
 <form method="post" action="/setup/radio">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-	{{$duplexOK := ne .Draft.HATType "cc1200"}}
-	{{if $duplexOK}}
-	<label class="choice"><input type="checkbox" name="duplex" id="duplex" {{if .Draft.Duplex}}checked{{end}}>
-		Duplex: receive and transmit on different frequencies at the same time</label>
-	<p class="hint">Only with a duplex board (two radios), e.g. the MMDVM_HS_Dual_Hat.</p>
-	{{end}}
-
-	<label for="rx_mhz"><span class="simplex-label">Frequency</span><span class="duplex-label">Receive frequency</span> (MHz)</label>
-	<input id="rx_mhz" name="rx_mhz" inputmode="decimal" value="{{mhz .Draft.RXFrequency}}" required placeholder="439.500"
-		{{with index .Errors "rx_mhz"}}aria-invalid="true"{{end}}>
-	{{with index .Errors "rx_mhz"}}<p class="error">{{.}}</p>{{end}}
-	{{with index .Warnings "rx_mhz"}}<p class="warning">{{.}}</p>{{end}}
-
-	{{if $duplexOK}}
-	<div class="duplex-only">
-		<label for="tx_mhz">Transmit frequency (MHz)</label>
-		<input id="tx_mhz" name="tx_mhz" inputmode="decimal" value="{{if .Draft.Duplex}}{{mhz .Draft.TXFrequency}}{{end}}" placeholder="434.500"
-			{{with index .Errors "tx_mhz"}}aria-invalid="true"{{end}}>
-		{{with index .Errors "tx_mhz"}}<p class="error">{{.}}</p>{{end}}
-		{{with index .Warnings "tx_mhz"}}<p class="warning">{{.}}</p>{{end}}
-	</div>
-	{{end}}
-	<p class="hint">Choose a frequency your local band plan sets aside for digital voice or hotspots, and that nobody nearby uses.</p>
-
-	{{if .Draft.UsesPower}}
-	<label for="power">Transmit power (dBm)</label>
-	<input id="power" name="power" type="number" min="-16" max="14" step="1" value="{{.Draft.Power}}" class="short"
-		{{with index .Errors "power"}}aria-invalid="true"{{end}}>
-	<p class="hint">10 dBm is 10 mW: plenty for a hotspot in the same building. The CC1200 HAT goes from -16 to 14 dBm.</p>
-	{{with index .Errors "power"}}<p class="error">{{.}}</p>{{end}}
-	{{else if .Draft.UsesRFLevel}}
-	<label for="rf_level">Transmit power (%)</label>
-	<input id="rf_level" name="rf_level" type="number" min="1" max="100" step="1" value="{{.Draft.RFLevel}}" class="short"
-		{{with index .Errors "rf_level"}}aria-invalid="true"{{end}}>
-	<p class="hint">100 is the board's full power. Turn it down if the hotspot sits right next to your radio, or to keep its signal from reaching further than it needs to. It sets the board's amplifier, so it's not a figure in watts: on an MMDVM_HS_Dual_Hat, 10% measured about 18 dB below 100%.</p>
-	{{with index .Errors "rf_level"}}<p class="error">{{.}}</p>{{end}}
-	{{else if eq .Draft.HATType "sx1255"}}
-	<p class="hint">The SX1255 HAT's transmit level is set with DACGain and MixerGain in the gateway's [Modem] section, not here.</p>
-	{{else}}
-	<p class="hint">This is an MMDVM repeater board: its transmit power comes from the radio attached to it.</p>
-	{{end}}
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-frequency" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}

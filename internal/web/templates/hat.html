@@ -1,32 +1,7 @@
 {{define "content"}}
-{{if .HAT.Type}}
-<div class="notice ok">
-	<p><strong>Found a{{if eq .HAT.Type "mmdvm"}}n MMDVM{{else}} CC1200{{end}} HAT.</strong></p>
-	{{with .HAT.Ident}}<p class="ident">{{.}}</p>{{end}}
-</div>
-{{else}}
-<div class="notice">
-	<p>No HAT answered on the serial port. That's expected for the SX1255 HAT, which doesn't use it. Otherwise, check the HAT is seated on the Pi's header.</p>
-</div>
-{{end}}
-
 <form method="post" action="/setup/hat">
 	<input type="hidden" name="csrf" value="{{.CSRF}}">
-	<fieldset>
-		<legend>Which radio HAT is on your Pi?</legend>
-		{{$t := .Draft.HATType}}{{if .HAT.Type}}{{$t = .HAT.Type}}{{end}}
-		<label class="choice card"><input type="radio" name="hat_type" value="cc1200" {{if eq $t "cc1200"}}checked{{end}}>
-			<span><strong>CC1200</strong><br><span class="hint">The M17 Project's CC1200 HAT (simplex).</span></span></label>
-		<label class="choice card"><input type="radio" name="hat_type" value="mmdvm" {{if eq $t "mmdvm"}}checked{{end}}>
-			<span><strong>MMDVM</strong><br><span class="hint">MMDVM_HS hotspot boards (simplex or duplex) and MMDVM repeater boards, with M17 firmware.</span></span></label>
-		<label class="choice card"><input type="radio" name="hat_type" value="sx1255" {{if eq $t "sx1255"}}checked{{end}}>
-			<span><strong>SX1255</strong><br><span class="hint">The SX1255 HAT. Needs one extra restart to enable its audio interface.</span></span></label>
-	</fieldset>
-	{{with index .Errors "hat_type"}}<p class="error">{{.}}</p>{{end}}
-
-	<div class="actions">
-		{{if .Prev}}<a class="back" href="/setup/{{.Prev}}">Back</a>{{end}}
-		<button type="submit">Continue</button>
-	</div>
+	{{template "f-hat" .}}
+	{{template "wizard-actions" .}}
 </form>
 {{end}}

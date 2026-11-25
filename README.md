@@ -14,7 +14,9 @@ Then open http://127.0.0.1:8090/setup/. `-dev` simulates an unconfigured hotspot
 
 ## How it fits together
 
-- **Behind nginx.** m17-web listens on `127.0.0.1:8090`; nginx sends it `/setup/`. While the setup access point is up, nginx sends it every host name, and m17-web answers the phones' captive-portal checks (`/generate_204`, `/hotspot-detect.html`, `/connecttest.txt`, ...) with a redirect to the wizard.
+- **Two ways through the same settings.** The settings come in sections (callsign, reflector, HAT, frequency, WiFi, host name, time zone, updates, SSH, admin password), each with its fields (`templates/sections.html`), its validation and its `m17-config.txt` keys (`internal/web/sections.go`). The wizard shows a few sections per step and applies everything at the end. The admin pages (`/admin/`: Station, Radio, Network, Updates, Security, System) show each section as its own form, applied when it's saved.
+- **Setup, then admin.** Applying the wizard writes `setup-done` in the state directory. After that (or on a hotspot that already has a callsign), logging in and `/setup/` open the admin pages. System → Run setup again goes through the wizard again from the current settings, with every step open.
+- **Behind nginx.** m17-web listens on `127.0.0.1:8090`; nginx sends it `/setup/` and `/admin/`. While the setup access point is up, nginx sends it every host name, and m17-web answers the phones' captive-portal checks (`/generate_204`, `/hotspot-detect.html`, `/connecttest.txt`, ...) with a redirect to the wizard.
 - **One admin password.** It's the password for rpi-dashboard's admin pages (a bcrypt hash in its `config.php`). Until it is set, only the first step is open; after that, a login is required.
 - **Settings are applied by m17os-config.** The wizard produces the same keys as `m17-config.txt` (`wifi_ssid`, `callsign`, `frequency`, ...), so there is one implementation of applying them, and its warnings come back to the done page.
 - **Progress is kept on disk** (`/var/lib/m17-web/wizard.json`, mode 0600), so a reboot or the switch from the setup access point to WiFi doesn't lose it. It's deleted once the settings are applied, since it may hold the WiFi password.
@@ -24,7 +26,7 @@ Then open http://127.0.0.1:8090/setup/. `-dev` simulates an unconfigured hotspot
 | Package | |
 |---|---|
 | `cmd/m17-web` | Flags and the HTTP server |
-| `internal/web` | Routes, handlers, templates, CSS and the little JavaScript (every page works without it) |
+| `internal/web` | Routes, handlers, the sections, templates, CSS and the little JavaScript (every page works without it) |
 | `internal/wizard` | The steps, their order, and the saved progress |
 | `internal/settings` | The draft, its validation, and the m17-config.txt keys it becomes |
 | `internal/auth` | Sessions (new ID at login), CSRF tokens, slowing down wrong passwords |

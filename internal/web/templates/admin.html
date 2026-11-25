@@ -1,0 +1,30 @@
+{{define "content"}}
+{{with .AdminPage.Intro}}<p>{{.}}</p>{{end}}
+{{$p := .}}
+{{range .AdminPage.Sections}}
+<section class="card" id="{{.ID}}" aria-labelledby="{{.ID}}-title">
+	<h2 id="{{.ID}}-title">{{.Title}}</h2>
+	{{with .Help}}<p class="hint">{{.}}</p>{{end}}
+	{{if and $p.Notice (eq $p.Notice.Section .ID)}}
+	{{with $p.Notice}}
+	<div class="notice {{if and .Result (not .Result.Warnings)}}ok{{else}}warn{{end}}" role="status">
+		<p><strong>{{.Message}}</strong></p>
+		{{with .Result}}
+		{{range .Warnings}}<p>{{.}}</p>{{end}}
+		{{if .RebootNeeded}}<p>Restart the hotspot (System page) for this to take effect.</p>{{end}}
+		{{if .NetworkChanged}}<p>The hotspot is reconnecting to the network. If this page stops answering, find it at its new address.</p>{{end}}
+		{{end}}
+	</div>
+	{{end}}
+	{{end}}
+	<form method="post" action="/admin/{{$p.AdminPage.ID}}/{{.ID}}">
+		<input type="hidden" name="csrf" value="{{$p.CSRF}}">
+		{{template "section" (withSection $p .ID)}}
+		<div class="actions">
+			{{if eq .ID "hat"}}<button type="submit" name="action" value="detect" class="secondary" formnovalidate>Detect</button>{{end}}
+			<button type="submit">{{or .Button "Save"}}</button>
+		</div>
+	</form>
+</section>
+{{end}}
+{{end}}

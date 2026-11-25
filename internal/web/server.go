@@ -40,7 +40,9 @@ type Server struct {
 	mux      *http.ServeMux
 
 	mu         sync.Mutex
-	lastResult *appliedResult // what the last Apply did, for /setup/done
+	lastResult *appliedResult    // what the last Apply did, for /setup/done
+	notices    map[string]notice // per session: what the last admin Save did
+	detected   *detection        // the last HAT detection from the Radio page
 }
 
 // appliedResult is what applying the wizard's settings did.
@@ -59,6 +61,7 @@ func New(plat platform.Platform, store *wizard.Store, log *slog.Logger) (*Server
 		log:      log,
 		pages:    map[string]*template.Template{},
 		mux:      http.NewServeMux(),
+		notices:  map[string]notice{},
 	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
@@ -82,6 +85,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /setup/done", s.done)
 	s.mux.HandleFunc("GET /setup/{step}", s.showStep)
 	s.mux.HandleFunc("POST /setup/{step}", s.submitStep)
+	s.adminRoutes()
 
 	// Captive-portal checks. While the setup access point is up, nginx
 	// sends every host name here; answering these with a redirect makes
@@ -175,7 +179,7 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sess.LoggedIn {
-		http.Redirect(w, r, "/setup/", http.StatusFound)
+		http.Redirect(w, r, s.home(r.Context()), http.StatusFound)
 		return
 	}
 	s.render(w, r, http.StatusOK, "login", &page{Title: "Log in", CSRF: sess.CSRF})
@@ -198,7 +202,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessions.LogIn(w, sess)
-	http.Redirect(w, r, "/setup/", http.StatusSeeOther)
+	http.Redirect(w, r, s.home(r.Context()), http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
@@ -247,6 +251,12 @@ func (s *Server) state(ctx context.Context) (wizard.State, error) {
 func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessions.Get(w, r)
 	if !s.access(w, r, sess, "") {
+		return
+	}
+	// A hotspot that is set up opens on the admin pages, unless setup is
+	// being run again or was started and not finished
+	if saved, err := s.store.Load(); err == nil && !saved.Rerun && len(saved.Done) == 0 && s.setupDone(r.Context()) {
+		http.Redirect(w, r, "/admin/", http.StatusFound)
 		return
 	}
 	st, err := s.state(r.Context())
@@ -306,24 +316,17 @@ func (s *Server) newPage(ctx context.Context, sess *auth.Session, st *wizard.Sta
 		Errors:      map[string]string{},
 		Warnings:    map[string]string{},
 	}
+	if err := s.loadSections(ctx, p, stepSections[step]...); err != nil {
+		return nil, err
+	}
 	switch step {
-	case "network":
-		nets, err := s.plat.ScanWiFi(ctx)
-		if err != nil {
-			s.log.Warn("WiFi scan failed", "err", err)
-		}
-		p.Networks = strongest(nets)
-		p.Countries = settings.Countries
-	case "station":
-		if p.TimeZones, err = s.plat.TimeZones(ctx); err != nil {
-			return nil, err
-		}
 	case "hat":
 		hat, err := s.plat.DetectHAT(ctx)
 		if err != nil {
 			s.log.Warn("HAT detection failed", "err", err)
 		}
 		p.HAT = hat
+		p.HATChecked = true
 		st.DetectedHAT = hat
 		if err := s.store.Save(*st); err != nil {
 			return nil, err
@@ -337,13 +340,6 @@ func (s *Server) newPage(ctx context.Context, sess *auth.Session, st *wizard.Sta
 		if fw.Status.Running() {
 			p.Refresh = 3
 		}
-	case "reflector":
-		refl, err := s.plat.Reflectors(ctx)
-		if err != nil {
-			return nil, err
-		}
-		slices.SortFunc(refl, func(a, b platform.Reflector) int { return cmp.Compare(a.Name, b.Name) })
-		p.Reflectors = refl
 	}
 	return p, nil
 }
@@ -394,6 +390,13 @@ func (s *Server) submitStep(w http.ResponseWriter, r *http.Request) {
 	d := st.Draft
 	f := r.PostForm
 	var probs settings.Problems
+	if ids, ok := stepSections[step]; ok {
+		in := sectionInput{form: f, prev: st.Draft, detected: st.DetectedHAT, detectRan: true}
+		if probs, err = s.parseSections(ctx, in, &d, ids...); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
 	switch step {
 	case "password":
 		pw := f.Get("password")
@@ -413,102 +416,9 @@ func (s *Server) submitStep(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-	case "network":
-		d.UseWiFi = f.Get("connection") != "ethernet"
-		d.WiFiSSID = f.Get("wifi_ssid")
-		if d.WiFiSSID == "" || d.WiFiSSID == "-other-" {
-			d.WiFiSSID = strings.TrimSpace(f.Get("wifi_ssid_other"))
-		}
-		// An empty password field keeps the one entered before, so going
-		// back to this step doesn't make the user type it again
-		if pw := f.Get("wifi_password"); pw != "" || d.WiFiSSID != st.Draft.WiFiSSID {
-			d.WiFiPassword = pw
-		}
-		d.WiFiCountry = strings.ToUpper(f.Get("wifi_country"))
-		d.UpdateKeepWiFi()
-		probs = d.CheckNetwork(settings.CountryCodes())
-	case "station":
-		d.Callsign = strings.ToUpper(strings.TrimSpace(f.Get("callsign")))
-		d.Suffix = strings.ToUpper(strings.TrimSpace(f.Get("suffix")))
-		d.Hostname = strings.ToLower(strings.TrimSpace(f.Get("hostname")))
-		d.TimeZone = f.Get("timezone")
-		zones, err := s.plat.TimeZones(ctx)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		probs = d.CheckStation(zones)
-	case "hat":
-		d.HATType = f.Get("hat_type")
-		// The speed the HAT answered at, if it's the type chosen; otherwise
-		// the type's usual speed
-		d.ModemSpeed = 0
-		if st.DetectedHAT.Type == d.HATType && st.DetectedHAT.Speed > 0 {
-			d.ModemSpeed = st.DetectedHAT.Speed
-		}
-		if d.HATType == "cc1200" {
-			d.Duplex = false // the CC1200 HAT is simplex
-		}
-		d.SetDetected(st.DetectedHAT)
-		probs = d.CheckHAT()
 	case "firmware":
 		if s.submitFirmware(w, r, sess, &st) {
 			return
-		}
-	case "radio":
-		d.RXFrequency = settings.ParseMHz(f.Get("rx_mhz"))
-		d.Duplex = f.Get("duplex") == "on" && d.HATType != "cc1200"
-		d.TXFrequency = d.RXFrequency
-		if d.Duplex {
-			d.TXFrequency = settings.ParseMHz(f.Get("tx_mhz"))
-		}
-		if d.UsesPower() {
-			d.Power, err = strconv.Atoi(strings.TrimSpace(f.Get("power")))
-			if err != nil {
-				d.Power = -999 // reported by CheckRadio
-			}
-		}
-		if d.UsesRFLevel() {
-			if v := strings.TrimSpace(f.Get("rf_level")); v != "" {
-				d.RFLevel, err = strconv.Atoi(v)
-				if err != nil {
-					d.RFLevel = -1 // reported by CheckRadio
-				}
-			} else if d.RFLevel == 0 {
-				d.RFLevel = 100 // a draft from before the setting: the gateway's default
-			}
-		}
-		probs = d.CheckRadio()
-	case "reflector":
-		d.Reflector = f.Get("reflector")
-		d.Module = strings.ToUpper(f.Get("module"))
-		refl, err := s.plat.Reflectors(ctx)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		probs = d.CheckReflector(refl)
-	case "updates":
-		d.AutoUpdate = f.Get("auto_update")
-		d.UpdateHour, err = strconv.Atoi(f.Get("update_hour"))
-		if err != nil {
-			d.UpdateHour = -1
-		}
-		probs = d.CheckUpdates()
-	case "ssh":
-		d.SSHKey = settings.NormalizeSSHKey(f.Get("ssh_key"))
-		d.SSHPasswordLogins = f.Get("ssh_password_logins") == "on"
-		// An empty password field keeps one entered before
-		if pw := f.Get("user_password"); pw != "" {
-			d.UserPassword = pw
-			probs = d.CheckSSH(f.Get("user_confirm"))
-			if probs.Errors["user_password"] != "" || probs.Errors["user_confirm"] != "" {
-				// A rejected password isn't kept: the form then mustn't
-				// say a new one is set
-				d.UserPassword = st.Draft.UserPassword
-			}
-		} else {
-			probs = d.CheckSSH(d.UserPassword)
 		}
 	case "review":
 		s.apply(w, r, sess, st)
@@ -555,6 +465,9 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request, sess *auth.Sessio
 		return
 	}
 	s.log.Info("settings applied", "warnings", len(res.Warnings), "reboot", res.RebootNeeded, "network", res.NetworkChanged)
+	if err := s.store.MarkSetupDone(); err != nil {
+		s.log.Warn("recording that setup is done", "err", err)
+	}
 	// The draft may hold the WiFi password: don't keep it
 	if err := s.store.Clear(); err != nil {
 		s.log.Warn("clearing the wizard state", "err", err)
@@ -613,6 +526,17 @@ type page struct {
 	Firmware   *firmwareInfo
 	Reflectors []platform.Reflector
 	Result     *platform.Result
+	// HATChecked is set once the HAT has been asked what it is (HAT holds
+	// the answer)
+	HATChecked bool
+
+	// The admin pages
+	Admin     bool
+	AdminPage adminPage
+	Nav       []navGroup
+	Notice    *notice
+	// ID is the section being rendered by the "section" template
+	ID string
 	// Refresh, if set, reloads the page after this many seconds
 	Refresh int
 }
@@ -640,6 +564,7 @@ func (s *Server) parseTemplates() error {
 			return m
 		},
 		"familyTitle": firmware.FamilyTitle,
+		"withSection": withSection,
 		"stepIndex":   func(id string) int { return wizard.Index(id) + 1 },
 		"done":        func(st *wizard.State, id string) bool { return st != nil && st.IsDone(id) },
 		"signalBars": func(dbm int) string {
@@ -667,10 +592,10 @@ func (s *Server) parseTemplates() error {
 	}
 	for _, n := range names {
 		name := strings.TrimSuffix(strings.TrimPrefix(n, "templates/"), ".html")
-		if name == "layout" {
+		if name == "layout" || name == "sections" {
 			continue
 		}
-		t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", n)
+		t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/sections.html", n)
 		if err != nil {
 			return fmt.Errorf("template %s: %w", name, err)
 		}

@@ -126,6 +126,21 @@ func newProblems() Problems {
 // OK reports whether there are no errors.
 func (p Problems) OK() bool { return len(p.Errors) == 0 }
 
+// Merge returns the problems of every q, together. Field names are unique
+// across sections, so nothing is overwritten.
+func Merge(q ...Problems) Problems {
+	p := newProblems()
+	for _, x := range q {
+		for k, v := range x.Errors {
+			p.Errors[k] = v
+		}
+		for k, v := range x.Warnings {
+			p.Warnings[k] = v
+		}
+	}
+	return p
+}
+
 // MinPasswordLength is the shortest admin password rpi-dashboard accepts.
 const MinPasswordLength = 8
 
@@ -190,9 +205,33 @@ func (d Draft) FullCallsign() string {
 	return d.Callsign + " " + d.Suffix
 }
 
-// CheckStation checks the station step. Callsign and Suffix should already
-// be upper case.
+// CheckStation checks the wizard's station step: callsign, host name and
+// time zone. Callsign and Suffix should already be upper case.
 func (d Draft) CheckStation(timeZones []string) Problems {
+	return Merge(d.CheckCallsign(), d.CheckHostname(), d.CheckTimeZone(timeZones))
+}
+
+// CheckHostname checks the host name.
+func (d Draft) CheckHostname() Problems {
+	p := newProblems()
+	if !hostnameRE.MatchString(d.Hostname) {
+		p.Errors["hostname"] = "Use lower-case letters, digits and hyphens (not at the start or end)."
+	}
+	return p
+}
+
+// CheckTimeZone checks the time zone against the system's list.
+func (d Draft) CheckTimeZone(timeZones []string) Problems {
+	p := newProblems()
+	if !slices.Contains(timeZones, d.TimeZone) {
+		p.Errors["timezone"] = "Choose a time zone from the list."
+	}
+	return p
+}
+
+// CheckCallsign checks the callsign and its suffix. They should already be
+// upper case.
+func (d Draft) CheckCallsign() Problems {
 	p := newProblems()
 	switch {
 	case d.Callsign == "":
@@ -211,12 +250,6 @@ func (d Draft) CheckStation(timeZones []string) Problems {
 	// M17 encodes up to 9 characters (base 40)
 	if n := len(d.FullCallsign()); n > 9 && p.Errors["callsign"] == "" {
 		p.Errors["callsign"] = fmt.Sprintf("M17 callsigns are at most 9 characters with the suffix and its space (this is %d).", n)
-	}
-	if !hostnameRE.MatchString(d.Hostname) {
-		p.Errors["hostname"] = "Use lower-case letters, digits and hyphens (not at the start or end)."
-	}
-	if !slices.Contains(timeZones, d.TimeZone) {
-		p.Errors["timezone"] = "Choose a time zone from the list."
 	}
 	return p
 }
@@ -439,27 +472,65 @@ func mhz(f float64) string {
 // m17os-config should apply them. The HAT comes before the radio settings
 // so its default serial speed doesn't overwrite anything else.
 func (d Draft) Settings() []platform.Setting {
-	var s []platform.Setting
-	add := func(k, v string) { s = append(s, platform.Setting{Key: k, Value: v}) }
+	return slices.Concat(
+		d.WiFiKeys(), d.HostnameKeys(), d.TimeZoneKeys(), d.CallsignKeys(),
+		d.HATKeys(), d.FrequencyKeys(), d.ReflectorKeys(), d.UpdatesKeys(),
+		d.SSHKeySettings(),
+	)
+}
+
+// keys builds a list of settings.
+type keys []platform.Setting
+
+func (s *keys) add(k, v string) { *s = append(*s, platform.Setting{Key: k, Value: v}) }
+
+// WiFiKeys are the network section's settings (none on Ethernet).
+func (d Draft) WiFiKeys() []platform.Setting {
+	var s keys
 	if d.UseWiFi {
-		add("wifi_country", d.WiFiCountry)
+		s.add("wifi_country", d.WiFiCountry)
 		// A saved network kept as it is: rewriting it without its
 		// password (which can't be read back) would make it an open one
 		if !d.KeepWiFi {
-			add("wifi_ssid", d.WiFiSSID)
+			s.add("wifi_ssid", d.WiFiSSID)
 			if d.WiFiPassword != "" {
-				add("wifi_password", d.WiFiPassword)
+				s.add("wifi_password", d.WiFiPassword)
 			}
 		}
 	}
-	add("hostname", d.Hostname)
-	add("timezone", d.TimeZone)
-	add("callsign", d.FullCallsign())
-	add("hat", d.HATType)
+	return s
+}
+
+// HostnameKeys are the host name's setting.
+func (d Draft) HostnameKeys() []platform.Setting {
+	return []platform.Setting{{Key: "hostname", Value: d.Hostname}}
+}
+
+// TimeZoneKeys are the time zone's setting.
+func (d Draft) TimeZoneKeys() []platform.Setting {
+	return []platform.Setting{{Key: "timezone", Value: d.TimeZone}}
+}
+
+// CallsignKeys are the callsign's setting.
+func (d Draft) CallsignKeys() []platform.Setting {
+	return []platform.Setting{{Key: "callsign", Value: d.FullCallsign()}}
+}
+
+// HATKeys are the HAT type and, when it was detected, its serial speed.
+func (d Draft) HATKeys() []platform.Setting {
+	var s keys
+	s.add("hat", d.HATType)
 	if d.ModemSpeed > 0 && d.HATType != "sx1255" {
 		// After hat, which sets the type's usual speed
-		add("modem_speed", strconv.Itoa(d.ModemSpeed))
+		s.add("modem_speed", strconv.Itoa(d.ModemSpeed))
 	}
+	return s
+}
+
+// FrequencyKeys are the frequencies, duplex and transmit power.
+func (d Draft) FrequencyKeys() []platform.Setting {
+	var s keys
+	add := s.add
 	if d.Duplex {
 		add("rx_frequency", mhz(d.RXFrequency))
 		add("tx_frequency", mhz(d.TXFrequency))
@@ -476,26 +547,45 @@ func (d Draft) Settings() []platform.Setting {
 	if d.UsesRFLevel() && d.RFLevel >= 1 && d.RFLevel <= 100 && d.RFLevel != d.RFLevelWas {
 		add("rf_level", strconv.Itoa(d.RFLevel))
 	}
+	return s
+}
+
+// ReflectorKeys are the reflector and module ("none" for RF only).
+func (d Draft) ReflectorKeys() []platform.Setting {
+	var s keys
 	if d.Reflector != "" {
-		add("reflector", d.Reflector)
-		add("module", d.Module)
+		s.add("reflector", d.Reflector)
+		s.add("module", d.Module)
 	} else {
 		// RF only: m17os-config clears the reflector for "none" (an empty
 		// value would leave the current one in place)
-		add("reflector", "none")
+		s.add("reflector", "none")
 	}
-	add("auto_update", d.AutoUpdate)
-	add("update_hour", strconv.Itoa(d.UpdateHour))
+	return s
+}
+
+// UpdatesKeys are the update policy and hour.
+func (d Draft) UpdatesKeys() []platform.Setting {
+	var s keys
+	s.add("auto_update", d.AutoUpdate)
+	s.add("update_hour", strconv.Itoa(d.UpdateHour))
+	return s
+}
+
+// SSHKeySettings are the SSH section's settings: a new m17 user password,
+// a key to add, and password logins when they change.
+func (d Draft) SSHKeySettings() []platform.Setting {
+	var s keys
 	if d.UserPassword != "" {
-		add("user_password", d.UserPassword)
+		s.add("user_password", d.UserPassword)
 	}
 	if d.SSHKey != "" {
-		add("ssh_key", d.SSHKey)
+		s.add("ssh_key", d.SSHKey)
 	}
 	// Only when it changes: on an older system the wizard can't read the
 	// current setting, and sending the default would turn it off
 	if d.SSHPasswordLogins != d.SSHPasswordWas {
-		add("enable_ssh_password", strconv.FormatBool(d.SSHPasswordLogins))
+		s.add("enable_ssh_password", strconv.FormatBool(d.SSHPasswordLogins))
 	}
 	return s
 }
