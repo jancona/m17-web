@@ -132,8 +132,49 @@ func TestMaxAndSaveLoad(t *testing.T) {
 	if len(e) != 3 || e[0].Src != "W1AW" || e[0].Active || e[2].Time.Second() != 3 {
 		t.Errorf("loaded: %+v", e)
 	}
+	// Text messages are kept apart, so all five survive
+	if m := l2.Messages(); len(m) != 5 || m[0].Time.Second() != 4 || m[4].Time.Second() != 0 {
+		t.Errorf("loaded messages: %+v", m)
+	}
 	if err := New(filepath.Join(t.TempDir(), "none.json"), 0).Load(); err != nil {
 		t.Errorf("missing file: %v", err)
+	}
+}
+
+func TestMessages(t *testing.T) {
+	l := New("", 2)
+	msg := func(s string) {
+		t.Helper()
+		if err := l.Handle([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	msg(`{"M17Packet":{"timestamp":"2026-11-20T01:00:00Z","source":"rf","src_callsign":"N1ADJ","dst_callsign":"@ALL","protocol":5,"text":"hello"}}`)
+	msg(`{"M17Packet":{"timestamp":"2026-11-20T01:00:01Z","source":"rf","src_callsign":"N1ADJ","dst_callsign":"ALL","protocol":129,"data":"81DEAD"}}`)
+	for i := range MaxMessages + 5 {
+		ts := time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC).Add(time.Duration(i) * time.Second).Format(time.RFC3339)
+		msg(`{"M17":{"timestamp":"` + ts + `","src_callsign":"W1AW","dst_callsign":"ALL","source":"network","action":"start"}}`)
+	}
+	m := l.Messages()
+	if len(m) != 1 || *m[0].Text != "hello" || m[0].Dst != "@ALL" {
+		t.Fatalf("messages after voice traffic: %+v", m)
+	}
+	for i := range MaxMessages + 5 {
+		msg(`{"M17Packet":{"timestamp":"2026-11-20T03:00:00Z","source":"network","src_callsign":"AA5RL","dst_callsign":"N1ADJ","protocol":5,"text":"` + string(rune('a'+i%26)) + `"}}`)
+	}
+	if m := l.Messages(); len(m) != MaxMessages || m[0].Src != "AA5RL" {
+		t.Errorf("got %d messages, want %d", len(m), MaxMessages)
+	}
+
+	// A log saved before messages were kept apart
+	path := filepath.Join(t.TempDir(), "lastheard.json")
+	os.WriteFile(path, []byte(`{"entries":[{"time":"2026-11-20T01:00:00Z","kind":"packet","src":"N1ADJ","dst":"ALL","text":"old"},{"time":"2026-11-20T01:00:01Z","kind":"voice","src":"N1ADJ","dst":"ALL"}]}`), 0o600)
+	old := New(path, 0)
+	if err := old.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if m := old.Messages(); len(m) != 1 || *m[0].Text != "old" {
+		t.Errorf("messages from an old log: %+v", m)
 	}
 }
 

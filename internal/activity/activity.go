@@ -25,6 +25,10 @@ import (
 // DefaultMax is how many entries the log keeps.
 const DefaultMax = 200
 
+// MaxMessages is how many text messages the log keeps, apart from the
+// entries, so a busy reflector's voice traffic doesn't push them out.
+const MaxMessages = 100
+
 // gnssWindow is how long after a transmission ends a position from the same
 // station still belongs to it (the gateway sends one every 15 s at most).
 const gnssWindow = 30 * time.Second
@@ -95,11 +99,12 @@ type Log struct {
 	max  int
 	now  func() time.Time
 
-	mu      sync.Mutex
-	entries []*Entry          // oldest first
-	current map[string]*Entry // voice in progress, by source
-	status  Status
-	dirty   bool
+	mu       sync.Mutex
+	entries  []*Entry          // oldest first
+	messages []*Entry          // text messages, oldest first (also in entries while they last)
+	current  map[string]*Entry // voice in progress, by source
+	status   Status
+	dirty    bool
 	// changed is closed (and replaced) whenever the log changes, so any
 	// number of watchers can wait for the next change
 	changed chan struct{}
@@ -140,7 +145,8 @@ func (l *Log) Load() error {
 		return err
 	}
 	var saved struct {
-		Entries []*Entry `json:"entries"`
+		Entries  []*Entry `json:"entries"`
+		Messages []*Entry `json:"messages"`
 	}
 	if err := json.Unmarshal(b, &saved); err != nil {
 		return fmt.Errorf("%s: %w", l.path, err)
@@ -154,6 +160,18 @@ func (l *Log) Load() error {
 		saved.Entries = saved.Entries[len(saved.Entries)-l.max:]
 	}
 	l.entries = saved.Entries
+	if saved.Messages == nil {
+		// Saved before messages were kept apart
+		for _, e := range saved.Entries {
+			if e.Text != nil {
+				saved.Messages = append(saved.Messages, e)
+			}
+		}
+	}
+	if len(saved.Messages) > MaxMessages {
+		saved.Messages = saved.Messages[len(saved.Messages)-MaxMessages:]
+	}
+	l.messages = saved.Messages
 	return nil
 }
 
@@ -168,8 +186,9 @@ func (l *Log) Save() error {
 		return nil
 	}
 	b, err := json.Marshal(struct {
-		Entries []*Entry `json:"entries"`
-	}{l.entries})
+		Entries  []*Entry `json:"entries"`
+		Messages []*Entry `json:"messages"`
+	}{l.entries, l.messages})
 	l.dirty = false
 	l.mu.Unlock()
 	if err != nil {
@@ -223,6 +242,17 @@ func (l *Log) Snapshot() (Status, []Entry) {
 		out = append(out, *l.entries[i])
 	}
 	return st, out
+}
+
+// Messages returns the text messages, newest first.
+func (l *Log) Messages() []Entry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]Entry, 0, len(l.messages))
+	for i := len(l.messages) - 1; i >= 0; i-- {
+		out = append(out, *l.messages[i])
+	}
+	return out
 }
 
 // The messages, as m17-gateway (and MMDVMHost) publish them. Only the fields
@@ -327,8 +357,15 @@ func (l *Log) Handle(payload []byte) error {
 			var v packetMsg
 			if err = json.Unmarshal(raw, &v); err == nil {
 				p := v.Protocol
-				l.add(&Entry{Time: l.parseTime(v.Timestamp), Kind: "packet", Source: v.Source,
-					Src: v.Src, Dst: v.Dst, CAN: v.CAN, Protocol: &p, Text: v.Text, Data: v.Data, BER: v.BER})
+				e := &Entry{Time: l.parseTime(v.Timestamp), Kind: "packet", Source: v.Source,
+					Src: v.Src, Dst: v.Dst, CAN: v.CAN, Protocol: &p, Text: v.Text, Data: v.Data, BER: v.BER}
+				l.add(e)
+				if e.Text != nil {
+					l.messages = append(l.messages, e)
+					if n := len(l.messages) - MaxMessages; n > 0 {
+						l.messages = slices.Delete(l.messages, 0, n)
+					}
+				}
 			}
 		case "M17GNSS":
 			var v gnssMsg

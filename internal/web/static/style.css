@@ -264,3 +264,8 @@ dl.status { margin-top: 0; }
 	table.activity td[data-label=Time] { display: block; color: var(--muted); font-size: 12px; }
 	table.activity td[data-label=BER]:not(:empty)::before, table.activity td[data-label=Length]:not(:empty)::before { content: attr(data-label) " "; color: var(--muted); }
 }
+table.messages td { vertical-align: top; }
+table.messages td.msg { white-space: pre-wrap; }
+@media (max-width: 560px) {
+	table.messages td.msg { display: block; padding-top: 4px; }
+}
