@@ -14,7 +14,8 @@ func (s *Server) SetActivity(log *activity.Log) { s.activity = log }
 // dashboard, it needs no login: it shows only what's on the air.
 func (s *Server) activityPage(w http.ResponseWriter, r *http.Request) {
 	if s.activity == nil {
-		http.NotFound(w, r)
+		// Started without a broker (-mqtt ""): say so rather than 404
+		s.render(w, r, http.StatusOK, "activity", &page{Title: "Activity"})
 		return
 	}
 	st, entries := s.activity.Snapshot()

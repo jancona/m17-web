@@ -88,11 +88,14 @@ func TestActivity(t *testing.T) {
 	}
 }
 
+// TestNoActivity: started without a broker, the page says live status is
+// off, and the API isn't there.
 func TestNoActivity(t *testing.T) {
 	ts := activityServer(t, nil)
-	for _, p := range []string{"/setup/activity", "/setup/api/activity"} {
-		if code, _ := fetch(t, ts.URL+p); code != 404 {
-			t.Errorf("GET %s without an activity log: %d, want 404", p, code)
-		}
+	if code, body := fetch(t, ts.URL+"/setup/activity"); code != 200 || !strings.Contains(body, "Live status is off") {
+		t.Errorf("activity page without a broker: %d\n%s", code, body)
+	}
+	if code, _ := fetch(t, ts.URL+"/setup/api/activity"); code != 404 {
+		t.Errorf("activity API without a broker: %d, want 404", code)
 	}
 }

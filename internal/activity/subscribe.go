@@ -21,7 +21,7 @@ const SaveInterval = 5 * time.Minute
 func (l *Log) Subscribe(ctx context.Context, addr, name string, log *slog.Logger) {
 	topics := map[string]byte{name + "/json": 1, name + "/state/#": 1}
 	host, _ := os.Hostname()
-	id := "m17-admin-" + host
+	id := "m17-web-" + host
 	if len(id) > 23 {
 		id = id[:23]
 	}

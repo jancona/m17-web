@@ -1,4 +1,7 @@
 {{define "content"}}
+{{if not .Status}}
+<div class="notice"><p>Live status is off: these pages were started without an MQTT broker, so they can't hear from the gateway. The dashboard still shows the hotspot's activity.</p></div>
+{{end}}
 {{with .Status}}
 <dl class="summary">
 	<dt>Reflector</dt><dd>{{if .Link}}{{.Link.Describe}}{{else}}unknown{{end}}</dd>
@@ -6,6 +9,9 @@
 	<dt>Modem</dt><dd>{{.ModemState}}</dd>
 	<dt>Gateway</dt><dd>{{if .Heard.IsZero}}not heard from yet{{else}}{{or .Gateway "running"}}{{end}}</dd>
 </dl>
+{{if and .Broker .Heard.IsZero}}
+<p class="hint">If this stays so, check that the gateway's settings have MQTT turned on ([MQTT] Enable=true) and that it's running.</p>
+{{end}}
 {{if not .Broker}}
 <div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
 {{end}}
