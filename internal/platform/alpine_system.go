@@ -395,6 +395,52 @@ func (a *Alpine) ControlGateway(ctx context.Context, action string) error {
 	return err
 }
 
+func (a *Alpine) GatewayConfig(ctx context.Context) (GatewayConfig, error) {
+	b, err := os.ReadFile(a.GatewayINI)
+	if err != nil {
+		return GatewayConfig{}, err
+	}
+	gc := GatewayConfig{Text: string(b)}
+	// The helper keeps the previous file beside the real one (the ini is a
+	// link into /data)
+	if real, err := filepath.EvalSymlinks(a.GatewayINI); err == nil {
+		_, err := os.Stat(real + ".prev")
+		gc.HasPrevious = err == nil
+	}
+	return gc, nil
+}
+
+// gatewayConfig runs a gateway-config helper command on text.
+func (a *Alpine) gatewayConfig(ctx context.Context, cmd, text string) (ConfigCheck, error) {
+	if len(text) > MaxGatewayConfig {
+		return ConfigCheck{}, fmt.Errorf("the settings file is too big (over %d KB)", MaxGatewayConfig>>10)
+	}
+	out, err := a.helper(ctx, text, cmd)
+	c := parseConfigCheck(out)
+	switch {
+	case err == nil:
+		return c, nil
+	case !c.OK():
+		return c, nil // exit 1: errors found
+	case strings.Contains(err.Error(), "can't check settings"):
+		return c, ErrNoConfigCheck
+	}
+	return c, unsupported(err)
+}
+
+func (a *Alpine) CheckGatewayConfig(ctx context.Context, text string) (ConfigCheck, error) {
+	return a.gatewayConfig(ctx, "gateway-config-check", text)
+}
+
+func (a *Alpine) SaveGatewayConfig(ctx context.Context, text string) (ConfigCheck, error) {
+	return a.gatewayConfig(ctx, "gateway-config-save", text)
+}
+
+func (a *Alpine) RestoreGatewayConfig(ctx context.Context) error {
+	_, err := a.helper(ctx, "", "gateway-config-restore")
+	return unsupported(err)
+}
+
 func (a *Alpine) Reboot(ctx context.Context) error {
 	_, err := a.helper(ctx, "", "reboot")
 	return unsupported(err)

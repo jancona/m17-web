@@ -21,7 +21,7 @@ type Problem struct {
 
 // Health limits.
 const (
-	// restartsWindow and restartsMax: this many gateway starts in the
+	// restartsWindow and restartsMax: this many failed gateway runs in the
 	// window is a restart loop
 	restartsWindow = 10 * time.Minute
 	restartsMax    = 3
@@ -43,7 +43,12 @@ var (
 
 // gatewayLogState is what the gateway's log says about its last start.
 type gatewayLogState struct {
-	Starts      []time.Time // every start in the log
+	Starts []time.Time // every start in the log
+	// Failed: when each run that failed started. A run failed if it ended
+	// (the gateway started again) without connecting to its modem, or with
+	// a panic. Restarts asked for (the admin pages, a settings change, an
+	// update) end runs that had connected.
+	Failed      []time.Time
 	LastStart   time.Time
 	Connected   bool   // its modem, since the last start
 	LastError   string // the last error line (across restarts)
@@ -55,6 +60,7 @@ type gatewayLogState struct {
 // gateway writes them.
 func readGatewayLog(lines []string) gatewayLogState {
 	var st gatewayLogState
+	panicked := false
 	for _, l := range lines {
 		var t time.Time
 		if m := gwTimeRE.FindStringSubmatch(l); m != nil {
@@ -62,11 +68,17 @@ func readGatewayLog(lines []string) gatewayLogState {
 		}
 		switch {
 		case strings.Contains(l, "Loading settings from"):
+			if len(st.Starts) > 0 && (!st.Connected || panicked) {
+				st.Failed = append(st.Failed, st.LastStart)
+			}
+			panicked = false
 			st.Starts = append(st.Starts, t)
 			st.LastStart = t
 			st.Connected, st.Reflector, st.Unreachable = false, "", false
 		case gwConnectedRE.MatchString(l):
 			st.Connected = true
+		case strings.HasPrefix(l, "panic:"):
+			panicked = true
 		case gwReachedRE.MatchString(l):
 			st.Reflector, st.Unreachable = gwReachedRE.FindStringSubmatch(l)[1], false
 		case gwNoReachRE.MatchString(l):
@@ -84,7 +96,7 @@ func readGatewayLog(lines []string) gatewayLogState {
 func gatewayProblems(st gatewayLogState, running bool, age time.Duration, now time.Time) []Problem {
 	var ps []Problem
 	recent := 0
-	for _, t := range st.Starts {
+	for _, t := range st.Failed {
 		if !t.IsZero() && now.Sub(t) < restartsWindow {
 			recent++
 		}
@@ -93,7 +105,7 @@ func gatewayProblems(st gatewayLogState, running bool, age time.Duration, now ti
 	case !running:
 		ps = append(ps, Problem{Level: "error", Title: "The gateway isn't running.", Detail: st.LastError, Page: "logs"})
 	case recent >= restartsMax:
-		ps = append(ps, Problem{Level: "error", Title: "The gateway keeps restarting: it started " + strconv.Itoa(recent) + " times in the last 10 minutes.", Detail: st.LastError, Page: "logs"})
+		ps = append(ps, Problem{Level: "error", Title: "The gateway keeps failing: it stopped " + strconv.Itoa(recent) + " times in the last 10 minutes and was restarted.", Detail: st.LastError, Page: "logs"})
 	case !st.Connected && age > modemGrace:
 		ps = append(ps, Problem{Level: "error", Title: "The gateway can't reach its radio HAT.", Detail: st.LastError, Page: "radio"})
 	}

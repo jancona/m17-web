@@ -47,6 +47,9 @@ var adminPages = []adminPage{
 	{ID: "firmware", Title: "Firmware", Group: "Setup", Sections: []adminSection{
 		{ID: "firmware", Title: "HAT firmware", Panel: true},
 	}},
+	{ID: "expert", Title: "Expert", Group: "Setup", Sections: []adminSection{
+		{ID: "gatewayini", Title: "Gateway settings file", Panel: true, Help: "Every m17-gateway setting, as text. The other pages change some of these too. A file the gateway wouldn't start with isn't saved."},
+	}},
 	{ID: "network", Title: "Network", Group: "Setup", Sections: []adminSection{
 		{ID: "wifistatus", Title: "Connection", Panel: true},
 		{ID: "wifinets", Title: "WiFi networks", Panel: true, Help: "The hotspot joins the first of these it finds, newest first."},

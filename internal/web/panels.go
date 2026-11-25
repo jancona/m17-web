@@ -17,16 +17,20 @@ import (
 
 // panelData is what the admin pages' panels show.
 type panelData struct {
-	Saved    []platform.SavedNetwork
-	WiFi     platform.WiFiStatus
-	Keys     []platform.SSHKey
-	OS       platform.OSStatus
-	Updates  updatesView // the Updates card
-	Sys      platform.SystemInfo
-	Gateway  platform.GatewayState
-	LogNames []string
-	LogName  string
-	LogLines []string
+	Saved   []platform.SavedNetwork
+	WiFi    platform.WiFiStatus
+	Keys    []platform.SSHKey
+	OS      platform.OSStatus
+	Updates updatesView // the Updates card
+	Sys     platform.SystemInfo
+	Gateway platform.GatewayState
+	// Expert: the gateway's settings file (or the text being edited), and
+	// the last check of it (nil if none)
+	Expert      platform.GatewayConfig
+	ExpertCheck *platform.ConfigCheck
+	LogNames    []string
+	LogName     string
+	LogLines    []string
 	// Unsupported lists the panels the system is too old for
 	Unsupported map[string]bool
 	// NewSSID is the network name typed in the add form (kept on errors)
@@ -84,6 +88,9 @@ func (s *Server) loadPanel(ctx context.Context, p *page, id string, q url.Values
 	case "gateway":
 		p.Panels.Gateway, err = s.plat.Gateway(ctx)
 		return note(err)
+	case "gatewayini":
+		p.Panels.Expert, err = s.plat.GatewayConfig(ctx)
+		return err
 	case "firmware":
 		if p.Firmware, err = s.adminFirmware(ctx, p.Draft); err != nil {
 			return err
@@ -244,6 +251,45 @@ func (s *Server) submitPanel(w http.ResponseWriter, r *http.Request, sess *auth.
 		}[action], nil)
 		return probs, true
 
+	case "gatewayini/check", "gatewayini/save":
+		// Browsers send a text area's lines with CRLF
+		text := strings.ReplaceAll(f.Get("ini"), "\r\n", "\n")
+		var c platform.ConfigCheck
+		var err error
+		if f.Get("action") == "check" {
+			c, err = s.plat.CheckGatewayConfig(ctx, text)
+		} else {
+			c, err = s.plat.SaveGatewayConfig(ctx, text)
+		}
+		switch {
+		case err != nil:
+			s.expertPage(w, r, sess, text, nil, "That didn't work: "+err.Error())
+		case !c.OK() && f.Get("action") == "save":
+			s.expertPage(w, r, sess, text, &c, "Not saved: the gateway wouldn't start with these settings.")
+		case f.Get("action") == "check":
+			msg := "The gateway would start with these settings. Not saved yet."
+			if !c.OK() {
+				msg = "The gateway wouldn't start with these settings."
+			}
+			s.expertPage(w, r, sess, text, &c, msg)
+		default:
+			s.log.Info("gateway settings file saved", "warnings", len(c.Warnings))
+			msg := "Saved. The gateway is restarting."
+			if len(c.Warnings) > 0 {
+				msg = "Saved, and the gateway is restarting. It ignores these settings:"
+			}
+			saved(msg, &platform.Result{Warnings: c.Warnings})
+		}
+		return probs, true
+
+	case "gatewayini/restore":
+		if err := s.plat.RestoreGatewayConfig(ctx); err != nil {
+			return fail(id, err)
+		}
+		s.log.Info("gateway settings file restored")
+		saved("The previous settings file is back. The gateway is restarting.", &platform.Result{})
+		return probs, true
+
 	case "sysinfo/shutdown":
 		if err := s.plat.Shutdown(ctx); err != nil {
 			return fail(id, err)
@@ -257,6 +303,33 @@ func (s *Server) submitPanel(w http.ResponseWriter, r *http.Request, sess *auth.
 	}
 	http.Error(w, "Unknown action", http.StatusBadRequest)
 	return probs, true
+}
+
+// expertPage shows the Expert page with text being edited, its check (nil
+// if none) and msg, keeping what was typed.
+func (s *Server) expertPage(w http.ResponseWriter, r *http.Request, sess *auth.Session, text string, c *platform.ConfigCheck, msg string) {
+	ctx := r.Context()
+	ap, _ := findAdminPage("expert")
+	d, err := s.currentDraft(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	p, err := s.newAdminPage(ctx, sess, ap, d, nil)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	p.Panels.Expert.Text, p.Panels.ExpertCheck = text, c
+	var res *platform.Result
+	status := http.StatusOK
+	if c != nil && c.OK() {
+		res = &platform.Result{Warnings: c.Warnings}
+	} else {
+		status = http.StatusUnprocessableEntity
+	}
+	p.Notice = &notice{Section: "gatewayini", Message: msg, Result: res}
+	s.render(w, r, status, "admin", p)
 }
 
 // restarting shows that the hotspot is restarting; the page reloads the
