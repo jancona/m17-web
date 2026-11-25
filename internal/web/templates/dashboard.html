@@ -45,7 +45,8 @@
 {{end}}
 {{end}}
 
-{{define "via"}}{{if eq . "rf"}}Radio{{else}}Reflector{{end}}{{end}}
+{{/* Network: from the reflector, or the hotspot's own (an echo, a reply) */}}
+{{define "via"}}{{if eq . "rf"}}Radio{{else}}Network{{end}}{{end}}
 
 {{define "call"}}{{if isCall .}}<a href="{{qrz .}}" target="_blank" rel="noopener noreferrer">{{.}}</a>{{else}}{{.}}{{end}}{{end}}
 
@@ -107,7 +108,7 @@
 			<nav class="filters" aria-label="Show">
 				<a href="{{$p.ShowLink "all"}}"{{if eq $p.Show "all"}} aria-current="page"{{end}}>All</a>
 				<a href="{{$p.ShowLink "rf"}}"{{if eq $p.Show "rf"}} aria-current="page"{{end}}>Radio</a>
-				<a href="{{$p.ShowLink "net"}}"{{if eq $p.Show "net"}} aria-current="page"{{end}}>Reflector</a>
+				<a href="{{$p.ShowLink "net"}}"{{if eq $p.Show "net"}} aria-current="page"{{end}}>Network</a>
 				<a href="{{$p.ShowLink "sms"}}"{{if eq $p.Show "sms"}} aria-current="page"{{end}}>Messages</a>
 			</nav>
 			<form class="toggles" method="get" action="/dashboard/">
