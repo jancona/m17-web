@@ -17,6 +17,10 @@ type fakeSystem struct {
 	started time.Time
 	// gatewayStart is when the gateway last started (and reported the HAT)
 	gatewayStart time.Time
+	// gatewayStopped: ControlGateway stopped it
+	gatewayStopped bool
+	// GatewayActions lists ControlGateway's calls, for tests
+	GatewayActions []string
 	// Reboots and Shutdowns count the calls, for tests.
 	Reboots, Shutdowns int
 	// Unsupported makes every System method fail as on an old image.
@@ -226,6 +230,36 @@ func (f *Fake) Log(ctx context.Context, name string) ([]string, error) {
 		return []string{"time=2026-11-24T03:02:43Z level=INFO msg=listening addr=http://127.0.0.1:8090/setup/"}, nil
 	}
 	return nil, errors.New("no such log")
+}
+
+func (f *Fake) Gateway(ctx context.Context) (GatewayState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sys.gatewayStopped {
+		return GatewayState{State: "stopped", AtBoot: true}, nil
+	}
+	return GatewayState{State: "started", Running: true, Uptime: time.Since(f.sys.gatewayStart), AtBoot: true}, nil
+}
+
+func (f *Fake) ControlGateway(ctx context.Context, action string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !slices.Contains(GatewayActions, action) {
+		return fmt.Errorf("unknown gateway action %q", action)
+	}
+	f.sys.GatewayActions = append(f.sys.GatewayActions, action)
+	f.sys.gatewayStopped = action == "stop"
+	if action != "stop" {
+		f.sys.gatewayStart = time.Now()
+	}
+	return nil
+}
+
+// GatewayCalls lists ControlGateway's calls.
+func (f *Fake) GatewayCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.sys.GatewayActions)
 }
 
 func (f *Fake) Reboot(ctx context.Context) error {

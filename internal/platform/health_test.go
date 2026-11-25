@@ -101,3 +101,59 @@ func TestProcessAge(t *testing.T) {
 		t.Error("found a process that isn't there")
 	}
 }
+
+// TestAlpineGateway: the gateway's state from rc-service's status output
+// (which exits non-zero when stopped) and /proc; restart falling back to
+// stop and start on a helper without it.
+func TestAlpineGateway(t *testing.T) {
+	dir := t.TempDir()
+	proc := filepath.Join(dir, "proc")
+	os.MkdirAll(filepath.Join(proc, "4242"), 0o755)
+	os.WriteFile(filepath.Join(proc, "uptime"), []byte("1000.00 0\n"), 0o644)
+	os.WriteFile(filepath.Join(proc, "4242", "comm"), []byte("m17-gateway\n"), 0o644)
+	os.WriteFile(filepath.Join(proc, "4242", "stat"), []byte("4242 (m17-gateway) S 1 4242 4242 0 -1 0 0 0 0 0 0 0 0 0 20 0 9 0 40000 0 0\n"), 0o644)
+	os.Symlink("/etc/init.d/m17-gateway", filepath.Join(dir, "runlevel"))
+	calls := filepath.Join(dir, "calls")
+	helper := func(status, restart string) {
+		os.WriteFile(filepath.Join(dir, "helper"), []byte(`#!/bin/sh
+echo "$*" >> `+calls+`
+case "$2" in
+	status) echo " * status: `+status+`"; [ "`+status+`" = started ] ;;
+	restart) `+restart+` ;;
+	*) exit 0 ;;
+esac
+`), 0o755)
+	}
+	a := NewAlpine()
+	a.Helper = []string{filepath.Join(dir, "helper")}
+	a.Files.Uptime = filepath.Join(proc, "uptime")
+	a.HealthPaths.Runlevel = filepath.Join(dir, "runlevel")
+
+	helper("started", "exit 0")
+	st, err := a.Gateway(t.Context())
+	if err != nil || st != (GatewayState{State: "started", Running: true, Uptime: 600 * time.Second, AtBoot: true}) {
+		t.Errorf("running: %+v %v", st, err)
+	}
+	os.RemoveAll(filepath.Join(proc, "4242"))
+	os.Remove(filepath.Join(dir, "runlevel"))
+	helper("stopped", "exit 0")
+	if st, err := a.Gateway(t.Context()); err != nil || st != (GatewayState{State: "stopped"}) {
+		t.Errorf("stopped: %+v %v", st, err)
+	}
+
+	os.Remove(calls)
+	if err := a.ControlGateway(t.Context(), "restart"); err != nil {
+		t.Fatal(err)
+	}
+	helper("stopped", `echo "admin-helper: usage: gateway stop|start|status" >&2; exit 2`)
+	if err := a.ControlGateway(t.Context(), "restart"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(calls)
+	if got, want := string(b), "gateway restart\ngateway restart\ngateway stop\ngateway start\n"; got != want {
+		t.Errorf("helper calls %q, want %q", got, want)
+	}
+	if err := a.ControlGateway(t.Context(), "reload"); err == nil {
+		t.Error("reload accepted")
+	}
+}

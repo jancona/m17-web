@@ -262,6 +262,43 @@ func TestAdminSystemAndLogs(t *testing.T) {
 	}
 }
 
+// TestAdminGateway: the gateway's state on the System page, and stop,
+// start and restart.
+func TestAdminGateway(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+
+	_, _, body := h.get(h.client, "/admin/system")
+	for _, want := range []string{"running for", "starts with the hotspot", `href="/admin/logs?log=gateway"`,
+		`value="stop"`, `value="restart"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("gateway section lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `name="action" value="start"`) {
+		t.Error("Start offered while the gateway runs")
+	}
+	code, loc, _ := h.postFrom(h.client, "/admin/system", "/admin/system/gateway", url.Values{"action": {"stop"}})
+	h.expectRedirect(code, loc, "/admin/system#gateway")
+	_, _, body = h.get(h.client, "/admin/system")
+	for _, want := range []string{"<strong>stopped</strong>", "off the air", `name="action" value="start"`, "The gateway is stopped."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("stopped gateway section lacks %q", want)
+		}
+	}
+	for _, action := range []string{"start", "restart"} {
+		code, loc, _ = h.postFrom(h.client, "/admin/system", "/admin/system/gateway", url.Values{"action": {action}})
+		h.expectRedirect(code, loc, "/admin/system#gateway")
+	}
+	if got, want := h.fake.GatewayCalls(), []string{"stop", "start", "restart"}; !slices.Equal(got, want) {
+		t.Errorf("gateway actions %v, want %v", got, want)
+	}
+	// Anything else is refused
+	if code, _, _ := h.postFrom(h.client, "/admin/system", "/admin/system/gateway", url.Values{"action": {"reload"}}); code != http.StatusBadRequest {
+		t.Errorf("unknown action: %d", code)
+	}
+}
+
 // TestAdminOldSystem: on an image whose admin helper predates the panels,
 // they say so instead of failing.
 func TestAdminOldSystem(t *testing.T) {

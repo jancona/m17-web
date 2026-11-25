@@ -23,6 +23,7 @@ type panelData struct {
 	OS       platform.OSStatus
 	Updates  updatesView // the Updates card
 	Sys      platform.SystemInfo
+	Gateway  platform.GatewayState
 	LogNames []string
 	LogName  string
 	LogLines []string
@@ -80,6 +81,9 @@ func (s *Server) loadPanel(ctx context.Context, p *page, id string, q url.Values
 	case "sysinfo":
 		p.Panels.Sys, err = s.plat.SystemInfo(ctx)
 		return err
+	case "gateway":
+		p.Panels.Gateway, err = s.plat.Gateway(ctx)
+		return note(err)
 	case "firmware":
 		if p.Firmware, err = s.adminFirmware(ctx, p.Draft); err != nil {
 			return err
@@ -225,6 +229,19 @@ func (s *Server) submitPanel(w http.ResponseWriter, r *http.Request, sess *auth.
 		}
 		s.log.Info("rebooting")
 		s.restarting(w, r, sess, "Restarting")
+		return probs, true
+
+	case "gateway/start", "gateway/stop", "gateway/restart":
+		action := f.Get("action")
+		if err := s.plat.ControlGateway(ctx, action); err != nil {
+			return fail(id, err)
+		}
+		s.log.Info("gateway "+action, "by", "admin")
+		saved(map[string]string{
+			"start":   "The gateway is starting.",
+			"stop":    "The gateway is stopped. The hotspot is off the air until you start it again or restart the hotspot.",
+			"restart": "The gateway is restarting.",
+		}[action], nil)
 		return probs, true
 
 	case "sysinfo/shutdown":

@@ -44,6 +44,13 @@ type System interface {
 	// Log returns the last lines of log name: one of LogNames.
 	Log(ctx context.Context, name string) ([]string, error)
 
+	// Gateway is whether m17-gateway is running, and since when.
+	Gateway(ctx context.Context) (GatewayState, error)
+	// ControlGateway starts, stops or restarts m17-gateway: action is
+	// "start", "stop" or "restart". Stopped, it stays stopped until it's
+	// started or the hotspot restarts.
+	ControlGateway(ctx context.Context, action string) error
+
 	// Reboot restarts the hotspot, a few seconds after the call returns.
 	Reboot(ctx context.Context) error
 	// Shutdown powers it off, a few seconds after the call returns.
@@ -82,6 +89,20 @@ type SystemInfo struct {
 	ModemIdent string
 	ModemAt    time.Time
 }
+
+// GatewayState is m17-gateway's service.
+type GatewayState struct {
+	// State is the service's: started, stopped, crashed (exited, not
+	// stopped), starting, stopping, or "" if unknown
+	State   string
+	Running bool          // a gateway process exists
+	Uptime  time.Duration // how long it has run
+	// AtBoot: the gateway starts with the hotspot
+	AtBoot bool
+}
+
+// GatewayActions are what ControlGateway does.
+var GatewayActions = []string{"start", "stop", "restart"}
 
 // SavedNetwork is a saved WiFi network.
 type SavedNetwork struct {
