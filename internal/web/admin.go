@@ -44,6 +44,9 @@ var adminPages = []adminPage{
 		{ID: "hat", Title: "Radio HAT"},
 		{ID: "frequency", Title: "Frequency and power"},
 	}},
+	{ID: "firmware", Title: "Firmware", Group: "Setup", Sections: []adminSection{
+		{ID: "firmware", Title: "HAT firmware", Panel: true},
+	}},
 	{ID: "network", Title: "Network", Group: "Setup", Sections: []adminSection{
 		{ID: "wifistatus", Title: "Connection", Panel: true},
 		{ID: "wifinets", Title: "WiFi networks", Panel: true, Help: "The hotspot joins the first of these it finds, newest first."},
@@ -191,6 +194,9 @@ func (s *Server) newAdminPage(ctx context.Context, sess *auth.Session, ap adminP
 		s.mu.Unlock()
 		if det != nil && time.Since(det.At) < detectionShown {
 			p.HAT, p.HATChecked = det.HAT, true
+		} else if si, err := s.plat.SystemInfo(ctx); err == nil && si.ModemIdent != "" {
+			// What the gateway found when it started: no probe needed
+			p.GatewayModem = &si
 		}
 	}
 	return p, nil

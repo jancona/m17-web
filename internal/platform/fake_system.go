@@ -15,6 +15,8 @@ type fakeSystem struct {
 	os      OSStatus
 	jobs    map[string]JobStatus
 	started time.Time
+	// gatewayStart is when the gateway last started (and reported the HAT)
+	gatewayStart time.Time
 	// Reboots and Shutdowns count the calls, for tests.
 	Reboots, Shutdowns int
 	// Unsupported makes every System method fail as on an old image.
@@ -30,8 +32,9 @@ func newFakeSystem() fakeSystem {
 			SlotA: "2026.11.23.1", SlotB: "2026.11.20.1", PreviousVersion: "2026.11.20.1",
 			LastUpdate: map[string]string{"TIME": "2026-11-24 03:02:40 EST", "RESULT": "installed", "OS_INSTALLED": "2026.11.23.1"},
 		},
-		jobs:    map[string]JobStatus{},
-		started: time.Now(),
+		jobs:         map[string]JobStatus{},
+		started:      time.Now(),
+		gatewayStart: time.Now().Add(-time.Hour),
 	}
 }
 
@@ -45,6 +48,7 @@ func (f *Fake) unsupported() error {
 func (f *Fake) SystemInfo(ctx context.Context) (SystemInfo, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.finishFlash()
 	return SystemInfo{
 		Board: "Raspberry Pi Zero 2 W Rev 1.0", Hostname: f.current.Hostname,
 		OSVersion: f.sys.os.Running, Kernel: "6.18.60+rpt-rpi-v8",
@@ -54,7 +58,7 @@ func (f *Fake) SystemInfo(ctx context.Context) (SystemInfo, error) {
 		DiskTotal: 24 << 30, DiskFree: 23 << 30,
 		Load:      "0.12 0.20 0.18",
 		Addresses: []string{"wlan0 192.168.1.94"},
-		Modem:     f.hat.Type, ModemIdent: f.hat.Ident, ModemAt: f.sys.started,
+		Modem:     f.hat.Type, ModemIdent: f.hat.Ident, ModemAt: f.sys.gatewayStart,
 	}, nil
 }
 

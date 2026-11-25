@@ -13,7 +13,7 @@
 	document.addEventListener("submit", function (e) {
 		if (e.defaultPrevented) return;
 		// Forms that remove, install or restart something ask first
-		var question = e.target.getAttribute("data-confirm");
+		var question = (e.submitter && e.submitter.getAttribute("data-confirm")) || e.target.getAttribute("data-confirm");
 		if (question && !window.confirm(question)) {
 			e.preventDefault();
 			return;
