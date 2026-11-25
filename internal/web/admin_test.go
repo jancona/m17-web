@@ -233,33 +233,6 @@ func TestAdminSSHKeys(t *testing.T) {
 	}
 }
 
-// TestAdminOSUpdate: check, install, then restart.
-func TestAdminOSUpdate(t *testing.T) {
-	h := newHarness(t)
-	h.runWizard(h.client)
-
-	_, _, body := h.get(h.client, "/admin/updates")
-	if !strings.Contains(body, "2026.11.23.1") || !strings.Contains(body, "Go back to 2026.11.20.1") {
-		t.Fatalf("OS status not shown:\n%s", body)
-	}
-	code, loc, _ := h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"check"}})
-	h.expectRedirect(code, loc, "/admin/updates#os")
-	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, "Update available: 2026.11.25.1") {
-		t.Fatalf("check result not shown:\n%s", body)
-	}
-	h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"install"}})
-	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, "The update is installed") {
-		t.Fatalf("install result not shown:\n%s", body)
-	}
-	code, _, body = h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"reboot"}})
-	if code != 200 || !strings.Contains(body, "Restarting") {
-		t.Errorf("restart: %d", code)
-	}
-	if r, _ := h.fake.Counts(); r != 1 {
-		t.Errorf("reboots: %d", r)
-	}
-}
-
 // TestAdminSystemAndLogs: the system panel, shut down, and each log.
 func TestAdminSystemAndLogs(t *testing.T) {
 	h := newHarness(t)
@@ -358,28 +331,6 @@ func TestAdminFirmwareOtherHAT(t *testing.T) {
 	}
 }
 
-// TestAdminUpdatePackages: Update now runs the packages job and shows
-// what it updated.
-func TestAdminUpdatePackages(t *testing.T) {
-	h := newHarness(t)
-	h.runWizard(h.client)
-	_, _, body := h.get(h.client, "/admin/updates")
-	if !strings.Contains(body, "M17 software") || !strings.Contains(body, `name="action" value="update"`) {
-		t.Fatalf("no Update now:\n%s", body)
-	}
-	code, loc, _ := h.postFrom(h.client, "/admin/updates", "/admin/updates/packages", url.Values{"action": {"update"}})
-	h.expectRedirect(code, loc, "/admin/updates#packages")
-	if _, _, body = h.get(h.client, "/admin/updates"); !strings.Contains(body, "Updated: m17-gateway 0.9.10-r0") {
-		t.Errorf("the result isn't shown:\n%s", body)
-	}
-	// On an old image the job is unknown: the page says to update first
-	h.fake.SetUnsupported(true)
-	code, _, body = h.postFrom(h.client, "/admin/updates", "/admin/updates/packages", url.Values{"action": {"update"}})
-	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "update it first") {
-		t.Errorf("old image: %d", code)
-	}
-}
-
 func TestPackagesResult(t *testing.T) {
 	for log, want := range map[string]string{
 		"updated packages: m17-web 0_git2-r0":                    "Updated: m17-web 0_git2-r0",
@@ -433,5 +384,66 @@ func TestHealthCards(t *testing.T) {
 		if !strings.Contains(body, "keeps restarting") || !strings.Contains(body, "modem returned NAK") || !strings.Contains(body, `<a href="/admin/logs">Logs →</a>`) {
 			t.Errorf("%s: no health card:\n%s", p, body)
 		}
+	}
+}
+
+// TestAdminUpdates: one Check for updates finds the system version and the
+// package updates; each installs from its own button.
+func TestAdminUpdates(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	page := func() string { _, _, b := h.get(h.client, "/admin/updates"); return b }
+	act := func(action string) {
+		t.Helper()
+		code, loc, _ := h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {action}})
+		h.expectRedirect(code, loc, "/admin/updates#os")
+	}
+
+	body := page()
+	if !strings.Contains(body, "2026.11.23.1") || !strings.Contains(body, "Go back to 2026.11.20.1") || !strings.Contains(body, ">Check for updates<") {
+		t.Fatalf("the Updates card:\n%s", body)
+	}
+	if strings.Contains(body, "M17 software</h2>") {
+		t.Error("the separate M17 software card is still there")
+	}
+	act("check")
+	body = page()
+	for _, want := range []string{"System version 2026.11.25.1 is available", "install it first", ">Install 2026.11.25.1<", "M17 software updates:</strong> m17-gateway 0.9.10-r0", ">Update packages<"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("after the check, no %q", want)
+		}
+	}
+	act("install")
+	body = page()
+	if !strings.Contains(body, "System version 2026.11.25.1 is installed.") || !strings.Contains(body, ">Restart now<") || strings.Contains(body, ">Install 2026.11.25.1<") {
+		t.Errorf("after installing:\n%s", body)
+	}
+	act("packages")
+	if body = page(); !strings.Contains(body, "Updated: m17-gateway 0.9.10-r0") || strings.Contains(body, "M17 software updates:") {
+		t.Errorf("after updating packages:\n%s", body)
+	}
+	code, _, body := h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"reboot"}})
+	if code != 200 || !strings.Contains(body, "Restarting") {
+		t.Errorf("restart: %d", code)
+	}
+}
+
+// TestAdminUpdatesOlderHelper: on an image whose helper checks the OS only,
+// Check for updates falls back to that, and Update packages stays offered.
+func TestAdminUpdatesOlderHelper(t *testing.T) {
+	h := newHarness(t)
+	h.runWizard(h.client)
+	h.fake.SetNoCheckJob(true)
+	code, loc, _ := h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"check"}})
+	h.expectRedirect(code, loc, "/admin/updates#os")
+	_, _, body := h.get(h.client, "/admin/updates")
+	if !strings.Contains(body, "System version 2026.11.25.1 is available") || !strings.Contains(body, ">Update packages<") {
+		t.Errorf("OS-only check:\n%s", body)
+	}
+	// An image too old for any of it says so
+	h.fake.SetUnsupported(true)
+	code, _, body = h.postFrom(h.client, "/admin/updates", "/admin/updates/os", url.Values{"action": {"packages"}})
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "This system version can") {
+		t.Errorf("old image: %d", code)
 	}
 }

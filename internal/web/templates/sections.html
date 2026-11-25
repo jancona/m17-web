@@ -33,7 +33,6 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 {{- else if eq .ID "sysinfo"}}{{template "p-sysinfo" .}}
 {{- else if eq .ID "logs"}}{{template "p-logs" .}}
 {{- else if eq .ID "firmware"}}{{template "p-firmware" .}}
-{{- else if eq .ID "packages"}}{{template "p-packages" .}}
 {{- end}}
 {{end}}
 
@@ -420,34 +419,49 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 		{{with $os.LastUpdate}}{{with index . "RESULT"}}<dt>Last automatic check</dt><dd>{{updateResult .}}{{with index $os.LastUpdate "TIME"}}, {{.}}{{end}}</dd>{{end}}{{end}}
 	</dl>
 
-	{{$check := .Panels.Check}}{{$inst := .Panels.Install}}
-	{{if $inst.Running}}
-	<div class="notice" role="status"><p><strong>Installing the update…</strong> This takes a few minutes. The hotspot keeps working meanwhile.</p>
-		{{with $inst.Log}}<pre class="log">{{range .}}{{.}}
+	{{$u := .Panels.Updates}}
+	{{if $u.Busy}}
+	<div class="notice" role="status"><p><strong>{{if eq $u.Busy "check"}}Checking for updates…{{else if eq $u.Busy "os-install"}}Installing the system update…{{else}}Updating the M17 software…{{end}}</strong>
+		{{if eq $u.Busy "os-install"}}This takes a few minutes. The hotspot keeps working meanwhile.{{else if eq $u.Busy "packages"}}It waits for the gateway to be idle, then installs what's new and restarts what changed.{{end}} This page updates by itself.</p>
+		{{with $u.BusyLog}}<pre class="log">{{range .}}{{.}}
 {{end}}</pre>{{end}}</div>
-	{{else if eq $inst.State "ok"}}
-	<div class="notice ok" role="status"><p><strong>The update is installed.</strong> Restart to start it; if it doesn't start properly, the hotspot goes back to this version by itself.</p>
+	{{else}}
+	{{with $os.AwaitingRestart}}
+	<div class="notice ok" role="status"><p><strong>System version {{.}} is installed.</strong> Restart to start it; if it doesn't start properly, the hotspot goes back to this version by itself.</p>
 		<div class="actions">{{template "panel-form" (dict "P" $p "Action" "reboot" "Label" "Restart now" "Class" "primary" "Confirm" "Restart the hotspot now? A QSO in progress is cut off.")}}</div></div>
-	{{else if eq $inst.State "failed"}}
-	<div class="notice warn" role="status"><p><strong>The update didn't install.</strong></p>
-		{{with $inst.Log}}<pre class="log">{{range .}}{{.}}
+	{{end}}
+	{{if $u.InstallFailed}}
+	<div class="notice warn" role="status"><p><strong>The system update didn't install.</strong></p>
+		{{with $u.InstallLog}}<pre class="log">{{range .}}{{.}}
 {{end}}</pre>{{end}}</div>
-	{{else if $check.Running}}
-	<div class="notice" role="status"><p><strong>Checking for an update…</strong></p></div>
-	{{else if eq $check.State "failed"}}
-	<div class="notice warn" role="status"><p><strong>The check didn't work.</strong> Is the hotspot online?</p>
-		{{with $check.Log}}<pre class="log">{{range .}}{{.}}
+	{{end}}
+	{{with $u.PackagesResult}}
+	<div class="notice {{if $u.PackagesFailed}}warn{{else}}ok{{end}}" role="status"><p><strong>{{if $u.PackagesFailed}}The M17 software update didn't work.{{else}}{{.}}{{end}}</strong></p>
+		{{with $u.PackagesLog}}<details><summary>Details</summary><pre class="log">{{range .}}{{.}}
+{{end}}</pre></details>{{end}}</div>
+	{{end}}
+	{{with $u.CheckError}}
+	<div class="notice warn" role="status"><p><strong>{{.}}</strong></p>
+		{{with $u.CheckLog}}<pre class="log">{{range .}}{{.}}
 {{end}}</pre>{{end}}</div>
-	{{else if updateAvailable $check}}
-	<div class="notice ok" role="status"><p><strong>Update available: {{updateAvailable $check}}.</strong> It goes into the other slot; the hotspot keeps working until you restart.</p>
-		<div class="actions">{{template "panel-form" (dict "P" $p "Action" "install" "Label" "Install it" "Class" "primary" "Confirm" "Download and install the update now?")}}</div></div>
-	{{else if eq $check.State "ok"}}
-	<div class="notice ok" role="status"><p><strong>Up to date.</strong></p></div>
+	{{end}}
+	{{if $u.UpToDate}}
+	<div class="notice ok" role="status"><p><strong>Everything is up to date.</strong></p></div>
+	{{end}}
+	{{with $u.OSAvailable}}
+	<div class="notice ok" role="status"><p><strong>System version {{.}} is available.</strong> It goes into the other copy of the system; the hotspot keeps working until you restart.{{if or $u.PackagesAvailable $u.PackagesUnknown}} It includes the newest M17 software, so install it first.{{end}}</p>
+		<div class="actions">{{template "panel-form" (dict "P" $p "Action" "install" "Label" (printf "Install %s" .) "Class" "primary" "Confirm" (printf "Download and install system version %s now?" .))}}</div></div>
+	{{end}}
+	{{with $u.PackagesAvailable}}
+	<div class="notice ok" role="status"><p><strong>M17 software updates:</strong> {{.}}</p>
+		<div class="actions">{{template "panel-form" (dict "P" $p "Action" "packages" "Label" "Update packages" "Class" (or (and $u.OSAvailable "secondary") "primary"))}}</div></div>
+	{{end}}
 	{{end}}
 
 	<div class="actions">
 		{{with $os.PreviousVersion}}{{template "panel-form" (dict "P" $p "Action" "rollback" "Label" (printf "Go back to %s" .) "Confirm" (printf "Go back to %s and restart? Settings stay as they are." .))}}{{end}}
-		{{if not (or $check.Running $inst.Running)}}{{template "panel-form" (dict "P" $p "Action" "check" "Label" "Check for an update" "Class" "primary")}}{{end}}
+		{{if and $u.PackagesUnknown (not $u.Busy)}}{{template "panel-form" (dict "P" $p "Action" "packages" "Label" "Update packages")}}{{end}}
+		{{if not $u.Busy}}{{template "panel-form" (dict "P" $p "Action" "check" "Label" "Check for updates" "Class" "primary")}}{{end}}
 	</div>
 {{end}}
 
@@ -601,24 +615,3 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 {{end}}
 {{end}}
 
-{{define "p-packages"}}
-	{{$p := .}}{{$j := .Panels.Packages}}
-	{{with index .Errors "packages"}}<p class="error">{{.}}</p>{{end}}
-	{{if $j.Running}}
-	<div class="notice" role="status"><p><strong>Updating…</strong> It waits for the gateway to be idle, then installs what's new and restarts what changed. This page updates by itself.</p>
-		{{with $j.Log}}<pre class="log">{{range .}}{{.}}
-{{end}}</pre>{{end}}</div>
-	{{else if eq $j.State "ok"}}
-	<div class="notice ok" role="status"><p><strong>{{packagesResult $j}}</strong>{{with $j.Started}} <span class="hint">({{unixTime .}})</span>{{end}}</p>
-		{{with $j.Log}}<details><summary>Details</summary><pre class="log">{{range .}}{{.}}
-{{end}}</pre></details>{{end}}</div>
-	{{else if eq $j.State "failed"}}
-	<div class="notice warn" role="status"><p><strong>The update didn't work.</strong> Is the hotspot online?</p>
-		{{with $j.Log}}<pre class="log">{{range .}}{{.}}
-{{end}}</pre>{{end}}</div>
-	{{end}}
-	{{with .Panels.OS.LastUpdate}}{{with index . "PACKAGES_UPDATED"}}<p class="hint">Last updated automatically: {{.}}</p>{{end}}{{end}}
-	{{if not $j.Running}}
-	<div class="actions">{{template "panel-form" (dict "P" $p "Action" "update" "Label" "Update now" "Class" "primary")}}</div>
-	{{end}}
-{{end}}
