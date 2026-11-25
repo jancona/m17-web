@@ -1,0 +1,72 @@
+{{define "content"}}
+{{with .Dash.Station}}
+<p class="station">
+	<strong class="call">{{or .Callsign "No callsign set"}}</strong>
+	{{if .RXFrequency}}<span>{{if .Duplex}}RX {{mhz (hz .RXFrequency)}} · TX {{mhz (hz .TXFrequency)}} MHz{{else}}{{mhz (hz .RXFrequency)}} MHz{{end}}</span>{{end}}
+	{{with .HATType}}<span>{{hatName .}}</span>{{end}}
+</p>
+{{end}}
+<div id="live" data-live="/dashboard/live" data-events="{{if .Dash.Live}}/dashboard/events{{end}}">
+{{template "dash-live" .}}
+</div>
+<script src="/setup/static/dashboard.js" defer></script>
+{{end}}
+
+{{/* The part the page's script replaces when something changes */}}
+{{define "dash-live"}}
+{{$d := .Dash}}
+{{if not $d.Live}}
+<div class="notice"><p>Live status is off: the hotspot's web pages were started without an MQTT broker, so they can't hear from the gateway.</p></div>
+{{else}}
+{{with $d.Status}}
+<dl class="summary status">
+	<dt>Reflector</dt><dd>{{if .Link}}{{.Link.Describe}}{{else}}not heard yet{{end}}</dd>
+	<dt>Radio</dt><dd>{{.ModemState}}{{with .Mode}}{{if ne . "idle"}} · {{.}}{{end}}{{end}}</dd>
+	<dt>Gateway</dt><dd>{{if .Heard.IsZero}}not heard from yet{{else}}{{or .Gateway "running"}}{{end}}</dd>
+</dl>
+{{if not .Broker}}
+<div class="notice warn"><p>Not connected to the hotspot's MQTT broker, so this page isn't being updated.</p></div>
+{{else if .Heard.IsZero}}
+<p class="hint">If this stays so, check that the gateway's settings have MQTT turned on ([MQTT] Enable=true) and that it's running.</p>
+{{end}}
+{{end}}
+
+{{range $d.OnAir}}
+<div class="onair" role="status">
+	<span class="dot" aria-hidden="true"></span>
+	<strong>{{.Src}}</strong> → {{.Dst}}
+	<span class="hint">{{if eq .Source "rf"}}on the radio{{else}}from the reflector{{end}}, since {{clock .Time}}</span>
+</div>
+{{end}}
+
+<h2>Last heard</h2>
+{{if $d.Entries}}
+<div class="table-wrap">
+<table class="activity">
+	<thead><tr><th>Time</th><th>From</th><th>To</th><th>Via</th><th>Length</th><th>BER</th><th></th></tr></thead>
+	<tbody>
+	{{range $d.Entries}}
+	<tr{{if .Active}} class="active"{{end}}>
+		<td data-label="Time">{{clock .Time}}</td>
+		<td data-label="From"><strong>{{.Src}}</strong></td>
+		<td data-label="To">{{.Dst}}</td>
+		<td data-label="Via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</td>
+		{{if eq .Kind "voice"}}
+		<td data-label="Length">{{if .Active}}on air{{else}}{{seconds .Duration}}{{end}}</td>
+		<td data-label="BER">{{pct .BER}}</td>
+		<td data-label="">{{if .LateEntry}}late entry {{end}}{{if .Lost}}lost {{end}}{{with .Position}}<span title="{{.Latitude}}, {{.Longitude}}">📍</span>{{end}}</td>
+		{{else}}
+		<td data-label="Length">{{if .Text}}SMS{{else}}packet{{end}}</td>
+		<td data-label="BER">{{pct .BER}}</td>
+		<td data-label="">{{with .Text}}“{{.}}”{{else}}{{.Data}}{{end}}</td>
+		{{end}}
+	</tr>
+	{{end}}
+	</tbody>
+</table>
+</div>
+{{else}}
+<p>Nothing heard yet.</p>
+{{end}}
+{{end}}
+{{end}}

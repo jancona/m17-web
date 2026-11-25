@@ -10,19 +10,6 @@ import (
 // SetActivity turns on the activity page and API, showing log.
 func (s *Server) SetActivity(log *activity.Log) { s.activity = log }
 
-// activityPage shows the reflector link and recent activity. Like the
-// dashboard, it needs no login: it shows only what's on the air.
-func (s *Server) activityPage(w http.ResponseWriter, r *http.Request) {
-	if s.activity == nil {
-		// Started without a broker (-mqtt ""): say so rather than 404
-		s.render(w, r, http.StatusOK, "activity", &page{Title: "Activity"})
-		return
-	}
-	st, entries := s.activity.Snapshot()
-	p := &page{Title: "Activity", Refresh: 10, Status: &st, Entries: entries}
-	s.render(w, r, http.StatusOK, "activity", p)
-}
-
 // activityJSON is the same, for the dashboard and other pages:
 //
 //	{"status": {...}, "entries": [...newest first]}

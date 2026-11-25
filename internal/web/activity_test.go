@@ -2,6 +2,7 @@ package web
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jancona/m17-web/internal/activity"
 	"github.com/jancona/m17-web/internal/platform"
@@ -61,15 +63,25 @@ func TestActivity(t *testing.T) {
 	}
 	ts := activityServer(t, act)
 
-	code, body := fetch(t, ts.URL+"/setup/activity")
+	code, body := fetch(t, ts.URL+"/dashboard/")
 	if code != 200 {
-		t.Fatalf("GET /setup/activity: %d", code)
+		t.Fatalf("GET /dashboard/: %d", code)
 	}
 	for _, want := range []string{"can&#39;t link to M17-M17 C (rejected)", "N1ADJ", "AA5RL", "“hi”", "81DEAD",
-		"6.0 s", "1.5%", "late entry", "📍", "Not connected to the hotspot's MQTT broker", `http-equiv="refresh"`} {
+		"6.0 s", "1.5%", "late entry", "📍", "Not connected to the hotspot's MQTT broker",
+		`<noscript><meta http-equiv="refresh" content="15"></noscript>`, `data-events="/dashboard/events"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("activity page has no %q", want)
+			t.Errorf("dashboard has no %q", want)
 		}
+	}
+	// The live part alone, as the page's script fetches it
+	code, live := fetch(t, ts.URL+"/dashboard/live")
+	if code != 200 || !strings.Contains(live, "Last heard") || strings.Contains(live, "<html") {
+		t.Errorf("live part: %d\n%s", code, live)
+	}
+	// The old activity page now redirects
+	if code, body := fetch(t, ts.URL+"/setup/activity"); code != 200 || !strings.Contains(body, "Last heard") {
+		t.Errorf("/setup/activity: %d", code)
 	}
 
 	code, body = fetch(t, ts.URL+"/setup/api/activity")
@@ -92,10 +104,49 @@ func TestActivity(t *testing.T) {
 // off, and the API isn't there.
 func TestNoActivity(t *testing.T) {
 	ts := activityServer(t, nil)
-	if code, body := fetch(t, ts.URL+"/setup/activity"); code != 200 || !strings.Contains(body, "Live status is off") {
-		t.Errorf("activity page without a broker: %d\n%s", code, body)
+	if code, body := fetch(t, ts.URL+"/dashboard/"); code != 200 || !strings.Contains(body, "Live status is off") || strings.Contains(body, `data-events="/`) {
+		t.Errorf("dashboard without a broker: %d\n%s", code, body)
 	}
-	if code, _ := fetch(t, ts.URL+"/setup/api/activity"); code != 404 {
-		t.Errorf("activity API without a broker: %d, want 404", code)
+	for _, p := range []string{"/setup/api/activity", "/dashboard/events"} {
+		if code, _ := fetch(t, ts.URL+p); code != 404 {
+			t.Errorf("%s without a broker: %d, want 404", p, code)
+		}
+	}
+}
+
+// TestDashboardEvents: the event stream sends an update when the gateway
+// reports something.
+func TestDashboardEvents(t *testing.T) {
+	act := activity.New("", 0)
+	ts := activityServer(t, act)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/dashboard/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type %q", ct)
+	}
+	got := make(chan string, 1)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			if sc.Text() == "event: update" {
+				got <- sc.Text()
+				return
+			}
+		}
+	}()
+	time.Sleep(100 * time.Millisecond) // the stream is open
+	if err := act.Handle([]byte(`{"MMDVM":{"timestamp":"2026-11-25T12:00:00Z","mode":"M17"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-got:
+	case <-ctx.Done():
+		t.Fatal("no update event")
 	}
 }
