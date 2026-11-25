@@ -47,13 +47,13 @@ sections, so .Errors and .Warnings can be shared by a page with several.
 	{{else if .PasswordSet}}
 	<p>An admin password is set. You can change it here, or leave these fields empty to keep it.</p>
 	{{else}}
-	<p>First, choose an admin password. It protects this setup and the dashboard's Gateway and Settings pages.</p>
+	<p>First, choose an admin password. It protects this setup and the hotspot's admin pages.</p>
 	{{end}}
 	<label for="password">{{if .PasswordSet}}New password{{else}}Password{{end}}</label>
 	<input id="password" name="password" type="password" autocomplete="new-password" minlength="8"
 		{{if or .Admin (not .PasswordSet)}}required{{end}}{{if not .PasswordSet}} autofocus{{end}}
 		{{with index .Errors "password"}}aria-invalid="true" aria-describedby="password-err"{{end}}>
-	<p class="hint">At least 8 characters. It's also the login for the dashboard's Gateway and Settings pages.</p>
+	<p class="hint">At least 8 characters. You'll use it to log in to the admin pages.</p>
 	{{with index .Errors "password"}}<p class="error" id="password-err">{{.}}</p>{{end}}
 	<label for="confirm">Type it again</label>
 	<input id="confirm" name="confirm" type="password" autocomplete="new-password" data-confirms="password"

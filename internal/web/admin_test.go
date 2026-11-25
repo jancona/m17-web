@@ -540,3 +540,23 @@ func TestAdminUpdatesOlderHelper(t *testing.T) {
 		t.Errorf("old image: %d", code)
 	}
 }
+
+// TestFrontPage: / is the wizard until the hotspot is set up, then the
+// dashboard; rpi-dashboard's old addresses lead to their replacements.
+func TestFrontPage(t *testing.T) {
+	h := newHarness(t)
+	code, loc, _ := h.get(h.client, "/")
+	h.expectRedirect(code, loc, "/setup/")
+	h.runWizard(h.client)
+	code, loc, _ = h.get(h.client, "/")
+	h.expectRedirect(code, loc, "/dashboard/")
+	for from, to := range map[string]string{
+		"/index.php": "/dashboard/", "/map.php": "/dashboard/map", "/messages.php": "/dashboard/messages",
+		"/config_gateway.php": "/admin/expert", "/config_dashboard.php": "/admin/system", "/login.php": "/setup/login",
+	} {
+		code, loc, _ := h.get(h.client, from)
+		if code != http.StatusMovedPermanently || loc != to {
+			t.Errorf("%s: %d %q, want 301 to %s", from, code, loc, to)
+		}
+	}
+}

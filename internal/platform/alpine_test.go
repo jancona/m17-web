@@ -73,6 +73,7 @@ esac
 	a.Helper = []string{filepath.Join(dir, "helper")}
 	a.GatewayINI = filepath.Join(dir, "m17-gateway.ini")
 	a.DashboardConfig = filepath.Join(dir, "config.php")
+	a.PasswordFile = filepath.Join(dir, "admin-password")
 	a.HostFiles = []string{filepath.Join(dir, "M17Hosts.txt"), filepath.Join(dir, "OverrideHosts.txt")}
 	a.ZoneTab = filepath.Join(dir, "zone1970.tab")
 	a.HostnameFile = filepath.Join(dir, "hostname")
@@ -219,6 +220,40 @@ func TestAlpinePasswordFromPHP(t *testing.T) {
 	os.WriteFile(a.DashboardConfig, []byte("<?php\nreturn array (\n  'admin_password_hash' => '',\n);\n"), 0o644)
 	if set, _ := a.AdminPasswordSet(); set {
 		t.Error("an empty hash counts as set")
+	}
+}
+
+// TestAlpinePasswordFile: setting the password writes m17-web's own file,
+// which then wins over rpi-dashboard's config.php.
+func TestAlpinePasswordFile(t *testing.T) {
+	a, _ := newTestAlpine(t)
+	h, _ := bcrypt.GenerateFromPassword([]byte("the-old-one"), bcrypt.MinCost)
+	os.WriteFile(a.DashboardConfig, []byte("<?php\nreturn array (\n  'admin_password_hash' => '"+string(h)+"',\n);\n"), 0o644)
+	if ok, _ := a.CheckAdminPassword("the-old-one"); !ok {
+		t.Fatal("config.php's password not used before the file exists")
+	}
+	if err := a.SetAdminPassword(context.Background(), "the-new-one"); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(a.PasswordFile)
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("password file: %v %v", fi, err)
+	}
+	if ok, _ := a.CheckAdminPassword("the-new-one"); !ok {
+		t.Error("new password refused")
+	}
+	if ok, _ := a.CheckAdminPassword("the-old-one"); ok {
+		t.Error("config.php's password still accepted")
+	}
+	// m17os-config writes the file with -hash-password's output and a
+	// newline
+	hp, err := HashPassword("from-the-card")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(a.PasswordFile, []byte(hp+"\n"), 0o600)
+	if ok, _ := a.CheckAdminPassword("from-the-card"); !ok {
+		t.Error("a hash from HashPassword refused")
 	}
 }
 

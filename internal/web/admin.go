@@ -57,7 +57,7 @@ var adminPages = []adminPage{
 		{ID: "hostname", Title: "Hotspot name"},
 	}},
 	{ID: "updates", Title: "Updates", Group: "Administration", Sections: []adminSection{
-		{ID: "os", Title: "Software", Panel: true, Help: "The system (installed into a second copy, then a restart) and the M17 software: m17-gateway, these pages, the dashboard and the HAT firmware files."},
+		{ID: "os", Title: "Software", Panel: true, Help: "The system (installed into a second copy, then a restart) and the M17 software: m17-gateway, these pages and the HAT firmware files."},
 		{ID: "updates", Title: "Automatic updates"},
 	}},
 	{ID: "security", Title: "Security", Group: "Administration", Sections: []adminSection{
