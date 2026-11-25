@@ -29,6 +29,9 @@ const DefaultMax = 200
 // entries, so a busy reflector's voice traffic doesn't push them out.
 const MaxMessages = 100
 
+// MaxStations is how many stations' last positions the log keeps.
+const MaxStations = 200
+
 // gnssWindow is how long after a transmission ends a position from the same
 // station still belongs to it (the gateway sends one every 15 s at most).
 const gnssWindow = 30 * time.Second
@@ -68,6 +71,14 @@ type Position struct {
 	StationType int      `json:"station_type"`
 }
 
+// StationPosition is a station's last reported position, for the map.
+type StationPosition struct {
+	Callsign string    `json:"callsign"`
+	Time     time.Time `json:"time"`
+	Source   string    `json:"source"` // rf or network
+	Position
+}
+
 // Link is the reflector link, from the gateway's retained link message.
 type Link struct {
 	Time      time.Time `json:"time"`
@@ -100,11 +111,15 @@ type Log struct {
 	now  func() time.Time
 
 	mu       sync.Mutex
-	entries  []*Entry          // oldest first
-	messages []*Entry          // text messages, oldest first (also in entries while they last)
-	current  map[string]*Entry // voice in progress, by source
-	status   Status
-	dirty    bool
+	entries  []*Entry // oldest first
+	messages []*Entry // text messages, oldest first (also in entries while they last)
+	// positions: each station's last position, by callsign. Kept apart
+	// from the entries: a position needn't come with a transmission heard
+	// here, and the map shows stations for longer than the entries last.
+	positions map[string]*StationPosition
+	current   map[string]*Entry // voice in progress, by source
+	status    Status
+	dirty     bool
 	// changed is closed (and replaced) whenever the log changes, so any
 	// number of watchers can wait for the next change
 	changed chan struct{}
@@ -115,7 +130,7 @@ func New(path string, max int) *Log {
 	if max <= 0 {
 		max = DefaultMax
 	}
-	return &Log{path: path, max: max, now: time.Now, current: map[string]*Entry{}, changed: make(chan struct{})}
+	return &Log{path: path, max: max, now: time.Now, current: map[string]*Entry{}, positions: map[string]*StationPosition{}, changed: make(chan struct{})}
 }
 
 // Changed returns a channel that is closed at the log's next change (a
@@ -145,8 +160,9 @@ func (l *Log) Load() error {
 		return err
 	}
 	var saved struct {
-		Entries  []*Entry `json:"entries"`
-		Messages []*Entry `json:"messages"`
+		Entries   []*Entry           `json:"entries"`
+		Messages  []*Entry           `json:"messages"`
+		Positions []*StationPosition `json:"positions"`
 	}
 	if err := json.Unmarshal(b, &saved); err != nil {
 		return fmt.Errorf("%s: %w", l.path, err)
@@ -172,6 +188,17 @@ func (l *Log) Load() error {
 		saved.Messages = saved.Messages[len(saved.Messages)-MaxMessages:]
 	}
 	l.messages = saved.Messages
+	if saved.Positions == nil {
+		// Saved before positions were kept apart
+		for _, e := range saved.Entries {
+			if e.Position != nil {
+				saved.Positions = append(saved.Positions, &StationPosition{Callsign: e.Src, Time: e.Time, Source: e.Source, Position: *e.Position})
+			}
+		}
+	}
+	for _, p := range saved.Positions {
+		l.setPosition(p)
+	}
 	return nil
 }
 
@@ -185,10 +212,15 @@ func (l *Log) Save() error {
 		l.mu.Unlock()
 		return nil
 	}
+	positions := make([]*StationPosition, 0, len(l.positions))
+	for _, p := range l.positions {
+		positions = append(positions, p)
+	}
 	b, err := json.Marshal(struct {
-		Entries  []*Entry `json:"entries"`
-		Messages []*Entry `json:"messages"`
-	}{l.entries, l.messages})
+		Entries   []*Entry           `json:"entries"`
+		Messages  []*Entry           `json:"messages"`
+		Positions []*StationPosition `json:"positions"`
+	}{l.entries, l.messages, positions})
 	l.dirty = false
 	l.mu.Unlock()
 	if err != nil {
@@ -253,6 +285,44 @@ func (l *Log) Messages() []Entry {
 		out = append(out, *l.messages[i])
 	}
 	return out
+}
+
+// Positions returns the stations' last positions heard since since, newest
+// first.
+func (l *Log) Positions(since time.Time) []StationPosition {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []StationPosition
+	for _, p := range l.positions {
+		if !p.Time.Before(since) {
+			out = append(out, *p)
+		}
+	}
+	slices.SortFunc(out, func(a, b StationPosition) int { return b.Time.Compare(a.Time) })
+	return out
+}
+
+// setPosition records a station's position, if it's newer than the one
+// kept, and keeps MaxStations. l.mu must be held.
+func (l *Log) setPosition(p *StationPosition) {
+	key := strings.ToUpper(strings.TrimSpace(p.Callsign))
+	if key == "" {
+		return
+	}
+	if old := l.positions[key]; old != nil && old.Time.After(p.Time) {
+		return
+	}
+	p.Callsign = strings.TrimSpace(p.Callsign)
+	l.positions[key] = p
+	if len(l.positions) > MaxStations {
+		var oldest string
+		for k, q := range l.positions {
+			if oldest == "" || q.Time.Before(l.positions[oldest].Time) {
+				oldest = k
+			}
+		}
+		delete(l.positions, oldest)
+	}
 }
 
 // The messages, as m17-gateway (and MMDVMHost) publish them. Only the fields
@@ -417,6 +487,8 @@ func (l *Log) voice(v m17Msg) {
 // progress from that station, or its most recent one if that just ended.
 func (l *Log) gnss(v gnssMsg) {
 	t := l.parseTime(v.Timestamp)
+	l.setPosition(&StationPosition{Callsign: v.Src, Time: t, Source: v.Source, Position: v.Position})
+	l.dirty = true
 	for i := len(l.entries) - 1; i >= 0; i-- {
 		e := l.entries[i]
 		if e.Kind != "voice" || e.Source != v.Source || !sameStation(e.Src, v.Src) {

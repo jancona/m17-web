@@ -107,10 +107,13 @@ func (s *Server) routes() {
 	}
 }
 
+// csp is the pages' Content-Security-Policy: nothing from outside.
+const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+
 // ServeHTTP adds security headers and a request log to every response.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
-	h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	h.Set("Content-Security-Policy", csp)
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 	if !strings.HasPrefix(r.URL.Path, "/setup/static/") {
@@ -563,6 +566,8 @@ type page struct {
 	// NoScriptRefresh, if set, reloads the page after this many seconds
 	// when JavaScript is off (the dashboard's script updates it live)
 	NoScriptRefresh int
+	// Styles are extra stylesheets for the page
+	Styles []string
 	// Health is what's wrong, shown as cards on the admin pages
 	Health []platform.Problem
 	// GatewayModem is what the gateway reported about the HAT when it
@@ -677,6 +682,37 @@ func (s *Server) parseTemplates() error {
 				return fmt.Sprintf("%.1f s", *f)
 			}
 			return d.String()
+		},
+		"coord": func(f float64) string { return strconv.FormatFloat(f, 'f', 5, 64) },
+		"altitude": func(m *float64) string {
+			if m == nil {
+				return ""
+			}
+			return fmt.Sprintf("%.0f m (%.0f ft)", *m, *m*3.28084)
+		},
+		"speed": func(kmh *float64, bearing *int) string {
+			if kmh == nil {
+				return ""
+			}
+			if *kmh == 0 {
+				return "stopped"
+			}
+			s := fmt.Sprintf("%.0f km/h (%.0f mph)", *kmh, *kmh*0.621371)
+			if bearing != nil {
+				s += fmt.Sprintf(" heading %d°", *bearing)
+			}
+			return s
+		},
+		"stationType": func(t int) string {
+			switch t {
+			case 0:
+				return "fixed"
+			case 1:
+				return "mobile"
+			case 2:
+				return "handheld"
+			}
+			return ""
 		},
 		"pct": func(f *float64) string {
 			if f == nil {

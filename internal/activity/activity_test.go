@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -233,5 +234,62 @@ func TestChanged(t *testing.T) {
 	case <-c:
 	default:
 		t.Error("the broker coming up didn't wake the watcher")
+	}
+}
+
+func TestPositions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lastheard.json")
+	l := New(path, 0)
+	replay(t, l, "testdata/session.jsonl")
+	p := l.Positions(time.Time{})
+	if len(p) != 1 || p[0].Callsign != "N1ADJ" || p[0].Latitude != 43.878414 || p[0].Source != "rf" {
+		t.Fatalf("positions from the session: %+v", p)
+	}
+	msg := func(s string) {
+		t.Helper()
+		if err := l.Handle([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A position with no transmission heard here still counts
+	msg(`{"M17GNSS":{"timestamp":"2026-11-21T01:00:00Z","source":"network","src_callsign":"W1AW    ","latitude":41.7,"longitude":-72.7,"station_type":0}}`)
+	// An older one for the same station doesn't replace it
+	msg(`{"M17GNSS":{"timestamp":"2026-11-21T00:00:00Z","source":"network","src_callsign":"w1aw","latitude":1,"longitude":1,"station_type":0}}`)
+	p = l.Positions(time.Time{})
+	if len(p) != 2 || p[0].Callsign != "W1AW" || p[0].Latitude != 41.7 {
+		t.Fatalf("positions: %+v", p)
+	}
+	if p := l.Positions(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)); len(p) != 1 || p[0].Callsign != "W1AW" {
+		t.Errorf("positions since: %+v", p)
+	}
+	if err := l.Save(); err != nil {
+		t.Fatal(err)
+	}
+	l2 := New(path, 0)
+	if err := l2.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if p := l2.Positions(time.Time{}); len(p) != 2 {
+		t.Errorf("loaded positions: %+v", p)
+	}
+
+	// No more than MaxStations
+	for i := range MaxStations + 3 {
+		ts := time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC).Add(time.Duration(i) * time.Second).Format(time.RFC3339)
+		msg(`{"M17GNSS":{"timestamp":"` + ts + `","source":"rf","src_callsign":"T` + strconv.Itoa(i) + `","latitude":1,"longitude":1,"station_type":0}}`)
+	}
+	if p := l.Positions(time.Time{}); len(p) != MaxStations || p[len(p)-1].Callsign != "T3" {
+		t.Errorf("got %d positions, oldest %+v", len(p), p[len(p)-1])
+	}
+
+	// A log saved before positions were kept apart
+	old := filepath.Join(t.TempDir(), "old.json")
+	os.WriteFile(old, []byte(`{"entries":[{"time":"2026-11-20T01:00:00Z","kind":"voice","source":"rf","src":"N1ADJ","dst":"ALL","position":{"latitude":43.8,"longitude":-70,"station_type":0}}]}`), 0o600)
+	l3 := New(old, 0)
+	if err := l3.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if p := l3.Positions(time.Time{}); len(p) != 1 || p[0].Callsign != "N1ADJ" || p[0].Longitude != -70 {
+		t.Errorf("positions from an old log: %+v", p)
 	}
 }

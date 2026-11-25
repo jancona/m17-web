@@ -102,6 +102,44 @@ func TestActivity(t *testing.T) {
 	if code, live := fetch(t, ts.URL+"/dashboard/messages/live"); code != 200 || !strings.Contains(live, "&lt;b&gt;73") || strings.Contains(live, "<html") {
 		t.Errorf("messages live part: %d\n%s", code, live)
 	}
+	// The map: a recent position (the session's own is dated, so the map
+	// stops showing it 30 days after)
+	recent := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	if err := act.Handle([]byte(`{"M17GNSS":{"timestamp":"` + recent + `","source":"network","src_callsign":"W1AW","latitude":41.71463,"longitude":-72.72708,"altitude":30,"speed":62,"bearing":35,"station_type":1}}`)); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Get(ts.URL + "/dashboard/map")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	mapPage := string(b)
+	if c := resp.Header.Get("Content-Security-Policy"); !strings.Contains(c, "img-src 'self' data: https://tile.openstreetmap.org;") || strings.Contains(c, "script-src 'self' http") {
+		t.Errorf("map CSP: %q", c)
+	}
+	for _, want := range []string{`data-positions="/dashboard/positions.json"`, `data-tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png"`,
+		`href="/setup/static/leaflet/leaflet.css"`, `src="/setup/static/leaflet/leaflet.js"`, `data-live="/dashboard/map/live"`,
+		"W1AW", "mobile", "41.71463, -72.72708", "30 m (98 ft)", "62 km/h (39 mph) heading 35°"} {
+		if !strings.Contains(mapPage, want) {
+			t.Errorf("map page has no %q", want)
+		}
+	}
+	// Other pages keep the strict policy
+	if resp, err := http.Get(ts.URL + "/dashboard/"); err == nil {
+		resp.Body.Close()
+		if strings.Contains(resp.Header.Get("Content-Security-Policy"), "openstreetmap") {
+			t.Error("the status page allows map tiles")
+		}
+	}
+	code, pj := fetch(t, ts.URL+"/dashboard/positions.json")
+	var ps []activity.StationPosition
+	if err := json.Unmarshal([]byte(pj), &ps); code != 200 || err != nil || len(ps) == 0 || ps[0].Callsign != "W1AW" || *ps[0].Bearing != 35 {
+		t.Errorf("positions.json: %d %v %s", code, err, pj)
+	}
+	if code, live := fetch(t, ts.URL+"/dashboard/map/live"); code != 200 || !strings.Contains(live, "W1AW") || strings.Contains(live, "<html") {
+		t.Errorf("map live part: %d\n%s", code, live)
+	}
 	// The old activity page now redirects
 	if code, body := fetch(t, ts.URL+"/setup/activity"); code != 200 || !strings.Contains(body, "Last heard") {
 		t.Errorf("/setup/activity: %d", code)
@@ -127,7 +165,10 @@ func TestActivity(t *testing.T) {
 // off, and the API isn't there.
 func TestNoActivity(t *testing.T) {
 	ts := activityServer(t, nil)
-	for _, p := range []string{"/dashboard/", "/dashboard/messages"} {
+	if code, body := fetch(t, ts.URL+"/dashboard/positions.json"); code != 200 || strings.TrimSpace(body) != "[]" {
+		t.Errorf("positions.json without a broker: %d %q", code, body)
+	}
+	for _, p := range []string{"/dashboard/", "/dashboard/messages", "/dashboard/map"} {
 		if code, body := fetch(t, ts.URL+p); code != 200 || !strings.Contains(body, "Live status is off") || strings.Contains(body, `data-events="/`) {
 			t.Errorf("%s without a broker: %d\n%s", p, code, body)
 		}
