@@ -220,3 +220,17 @@ func TestHelpPage(t *testing.T) {
 		t.Error("the dashboard doesn't link to help")
 	}
 }
+
+func TestCANLabelAndStationID(t *testing.T) {
+	if got := canLabel(activity.Entry{CAN: ptr(2)}); got != "CAN 2" {
+		t.Errorf("CAN 2: %q", got)
+	}
+	if got := canLabel(activity.Entry{CAN: ptr(0)}) + canLabel(activity.Entry{}); got != "" {
+		t.Errorf("CAN 0 or none: %q", got)
+	}
+	for call, want := range map[string]string{"N1ADJ": "station-N1ADJ", "n1adj x  ": "station-N1ADJ-X", "AA5RL/P": "station-AA5RL-P"} {
+		if got := stationID(call); got != want {
+			t.Errorf("stationID(%q) = %q, want %q", call, got, want)
+		}
+	}
+}

@@ -41,6 +41,27 @@
 		return div;
 	}
 
+	// stationID is a station's anchor, as the server makes it (feed.go):
+	// "station-" and the callsign, other characters than letters and digits
+	// as "-"
+	function stationID(call) {
+		return "station-" + call.trim().toUpperCase().replace(/[^A-Z0-9]/g, "-");
+	}
+
+	// focus shows the station the page's address names (#station-N1ADJ, from
+	// the dashboard's position icons), with its popup open
+	function focus() {
+		var m = markers[decodeURIComponent(location.hash.slice(1))];
+		if (!m) return false;
+		map.setView(m.getLatLng(), 12, { animate: false });
+		m.openPopup();
+		// The address is also the station's row in the list below (for
+		// browsers without scripts): show the map, not the row
+		el.scrollIntoView({ block: "start" });
+		return true;
+	}
+	window.addEventListener("hashchange", focus);
+
 	function update() {
 		fetch(el.dataset.positions, { cache: "no-store" })
 			.then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
@@ -48,7 +69,7 @@
 				var seen = {};
 				list.forEach(function (p) {
 					if (!isFinite(p.latitude) || !isFinite(p.longitude)) return;
-					var key = p.callsign.toUpperCase();
+					var key = stationID(p.callsign);
 					seen[key] = true;
 					var ll = [p.latitude, p.longitude];
 					if (markers[key]) {
@@ -63,13 +84,16 @@
 						delete markers[key];
 					}
 				});
-				// Show them all, the first time there are any
+				// The first time there are any: the station a link named, or
+				// all of them
 				var keys = Object.keys(markers);
 				if (!fitted && keys.length) {
 					fitted = true;
 					map.invalidateSize({ pan: false });
-					map.fitBounds(L.latLngBounds(keys.map(function (k) { return markers[k].getLatLng(); })),
-						{ maxZoom: 10, padding: [30, 30], animate: false });
+					if (!focus()) {
+						map.fitBounds(L.latLngBounds(keys.map(function (k) { return markers[k].getLatLng(); })),
+							{ maxZoom: 10, padding: [30, 30], animate: false });
+					}
 				}
 			})
 			.catch(function () { /* the next update tries again */ });

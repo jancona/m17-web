@@ -77,7 +77,12 @@ func TestActivity(t *testing.T) {
 		`aria-label="Last heard"`, "<dt>Mode</dt><dd>Data</dd>",
 		// Callsigns link to QRZ; ALL and reflectors don't
 		`<a href="https://www.qrz.com/db/N1ADJ" target="_blank" rel="noopener noreferrer">N1ADJ</a>`,
-		`data-live="/dashboard/live?f=1&amp;hide=1&amp;show=all"`, "Latest per station", `href="/dashboard/messages"`, `href="/dashboard/map"`} {
+		`data-live="/dashboard/live?f=1&amp;hide=1&amp;show=all"`,
+		// N1ADJ sent a position with its transmission: an icon linking to it
+		// on the map; the Notes column's labels
+		`<a class="gnss" href="/dashboard/map#station-N1ADJ" title="Position: 43.87841, -69.99155" aria-label="N1ADJ's position on the map">`,
+		`<span class="note" title="Heard from partway through: the start was missed">late entry</span>`,
+		`<span class="note" title="Channel Access Number">CAN 2</span>`, "Latest per station", `href="/dashboard/messages"`, `href="/dashboard/map"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard has no %q", want)
 		}
@@ -123,7 +128,7 @@ func TestActivity(t *testing.T) {
 	if c := resp.Header.Get("Content-Security-Policy"); !strings.Contains(c, "img-src 'self' data: https://tile.openstreetmap.org;") || strings.Contains(c, "script-src 'self' http") {
 		t.Errorf("map CSP: %q", c)
 	}
-	for _, want := range []string{`data-positions="/dashboard/positions.json"`, `data-tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png"`,
+	for _, want := range []string{`<td id="station-W1AW">`, `data-positions="/dashboard/positions.json"`, `data-tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png"`,
 		`href="/setup/static/leaflet/leaflet.css"`, `src="/setup/static/leaflet/leaflet.js"`, `data-live="/dashboard/map/live"`,
 		"W1AW", "mobile", "41.71463, -72.72708", "30 m (98 ft)", "62 km/h (39 mph) heading 35°"} {
 		if !strings.Contains(mapPage, want) {

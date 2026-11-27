@@ -136,6 +136,31 @@ func entryMode(e activity.Entry) string {
 	return "Data"
 }
 
+// canLabel is "CAN n" for an entry on a Channel Access Number other than 0
+// (most stations use 0), else "".
+func canLabel(e activity.Entry) string {
+	if e.CAN == nil || *e.CAN == 0 {
+		return ""
+	}
+	return "CAN " + strconv.Itoa(*e.CAN)
+}
+
+// stationID is the map page's anchor for a station: "station-" and its
+// callsign, padding dropped, other characters than letters and digits as
+// "-" (map.js makes the same from the positions it gets).
+func stationID(call string) string {
+	var b strings.Builder
+	b.WriteString("station-")
+	for _, r := range strings.ToUpper(strings.TrimSpace(call)) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
+}
+
 // qrzURL is a callsign's QRZ page: its base call, without a suffix
 // (N1ADJ/P, N1ADJ-7) or the M17 padding.
 func qrzURL(call string) string {
