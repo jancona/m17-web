@@ -53,6 +53,10 @@
 
 {{define "call"}}{{if isCall .}}<a href="{{qrz .}}" target="_blank" rel="noopener noreferrer">{{.}}</a>{{else}}{{.}}{{end}}{{end}}
 
+{{/* A station's position, as a link to it on the map. The icon is
+     Lucide's satellite-dish (ISC licence, lucide.dev). */}}
+{{define "gnss"}}<a class="gnss" href="/dashboard/map#{{stationID .Src}}" title="Position: {{coord .Position.Latitude}}, {{coord .Position.Longitude}}" aria-label="{{.Src}}'s position on the map"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a7.31 7.31 0 0 0 10 10Z"/><path d="m9 15 3-3"/><path d="M17 13a6 6 0 0 0-6-6"/><path d="M21 13A10 10 0 0 0 11 3"/></svg></a>{{end}}
+
 {{define "dash-status"}}
 {{$d := .}}
 <header class="dash-head">
@@ -89,7 +93,7 @@
 	<section class="caller{{if .Active}} live{{end}}" role="status" aria-label="{{if .Active}}On air now{{else}}Last heard{{end}}">
 		<div class="who">
 			<span class="label">{{if .Active}}<span class="dot" aria-hidden="true"></span>On air now{{else}}Last heard{{end}}</span>
-			<span class="big">{{template "call" .Src}}</span>
+			<span class="big">{{template "call" .Src}}{{if .Position}} {{template "gnss" .}}{{end}}</span>
 		</div>
 		<dl>
 			<div><dt>To</dt><dd>{{.Dst}}</dd></div>
@@ -131,12 +135,12 @@
 			{{range $d.Entries}}
 			<tr{{if .Active}} class="active"{{end}}>
 				<td>{{clock .Time}} <time class="sub" datetime="{{rfc3339 .Time}}" data-ago>{{ago .Time}}</time></td>
-				<td><strong>{{template "call" .Src}}</strong><span class="sub ph">{{template "via" .Source}}</span></td>
+				<td><strong>{{template "call" .Src}}</strong>{{if .Position}} {{template "gnss" .}}{{end}}<span class="sub ph">{{template "via" .Source}}</span></td>
 				<td>{{.Dst}}{{if .Text}}<span class="sub ph msg">{{.Text}}</span>{{end}}</td>
 				<td class="c-via"><span class="via">{{if eq .Source "rf"}}RF{{else}}Net{{end}}</span></td>
 				<td>{{if eq .Kind "voice"}}{{if .Active}}<span data-since="{{rfc3339 .Time}}">{{since .Time}}</span>{{else}}{{seconds .Duration}}{{end}}{{else}}{{mode .}}{{end}}{{with .BER}}<span class="sub ph">BER {{pct .}}</span>{{end}}</td>
 				<td class="c-ber">{{pct .BER}}</td>
-				<td class="c-notes">{{if .LateEntry}}late entry {{end}}{{if .Lost}}lost {{end}}{{with .Position}}<span title="{{coord .Latitude}}, {{coord .Longitude}}">position</span>{{end}}{{with .Text}}“{{.}}”{{end}}</td>
+				<td class="c-notes">{{if .LateEntry}}<span class="note" title="Heard from partway through: the start was missed">late entry</span> {{end}}{{if .Lost}}<span class="note" title="Ended without an end frame: it faded or was cut off">lost</span> {{end}}{{with canLabel .}}<span class="note" title="Channel Access Number">{{.}}</span> {{end}}{{with .Text}}“{{.}}”{{end}}</td>
 			</tr>
 			{{end}}
 			</tbody>
@@ -200,7 +204,7 @@
 	<tbody>
 	{{range .Positions}}
 	<tr>
-		<td><strong>{{template "call" .Callsign}}</strong> <span class="hint">{{stationType .StationType}}</span></td>
+		<td id="{{stationID .Callsign}}"><strong>{{template "call" .Callsign}}</strong> <span class="hint">{{stationType .StationType}}</span></td>
 		<td>{{clock .Time}}</td>
 		<td>{{coord .Latitude}}, {{coord .Longitude}}</td>
 		<td>{{altitude .Altitude}}</td>

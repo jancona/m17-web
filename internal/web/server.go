@@ -693,12 +693,14 @@ func (s *Server) parseTemplates() error {
 			}
 			return d.String()
 		},
-		"txPower": txPower,
-		"mode":    entryMode,
-		"qrz":     qrzURL,
-		"isCall":  isCallsign,
-		"ago":     func(t time.Time) string { return ago(t, time.Now()) },
-		"rfc3339": func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
+		"txPower":   txPower,
+		"canLabel":  canLabel,
+		"stationID": stationID,
+		"mode":      entryMode,
+		"qrz":       qrzURL,
+		"isCall":    isCallsign,
+		"ago":       func(t time.Time) string { return ago(t, time.Now()) },
+		"rfc3339":   func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
 		"since": func(t time.Time) string {
 			d := max(time.Since(t).Round(time.Second), 0)
 			return fmt.Sprintf("%d:%02d", int(d.Minutes()), int(d.Seconds())%60)
